@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
+import '../models/note_template.dart';
 import '../services/ai_service.dart';
 import '../services/storage_service.dart';
 import '../services/task_service.dart';
@@ -149,28 +150,28 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
     StorageService.instance.saveOrUpdateNote(_currentNote);
   }
 
-  void _openTemplatePicker() {
-    showDialog(
+  Future<void> _openTemplatePicker() async {
+    final template = await showDialog<NoteTemplate>(
       context: context,
-      builder: (ctx) => TemplatePickerDialog(
-        onTemplateSelected: (template) {
-          setState(() {
-            _currentNote = _currentNote.copyWith(
-              paperType: template.paperType,
-              templateImageBase64: template.backgroundImageBase64,
-            );
-            if (_titleController.text.trim().isEmpty && template.defaultTitle.isNotEmpty) {
-              _titleController.text = template.defaultTitle;
-            }
-            if (_contentController.text.trim().isEmpty && template.defaultContent.isNotEmpty) {
-              _contentController.text = template.defaultContent;
-            }
-            _hasChanges = true;
-          });
-          StorageService.instance.saveOrUpdateNote(_currentNote);
-        },
-      ),
+      builder: (ctx) => const TemplatePickerDialog(),
     );
+
+    if (template != null && mounted) {
+      setState(() {
+        _currentNote = _currentNote.copyWith(
+          paperType: template.paperType,
+          templateImageBase64: template.backgroundImageBase64,
+        );
+        if (_titleController.text.trim().isEmpty && template.defaultTitle.isNotEmpty) {
+          _titleController.text = template.defaultTitle;
+        }
+        if (_contentController.text.trim().isEmpty && template.defaultContent.isNotEmpty) {
+          _contentController.text = template.defaultContent;
+        }
+        _hasChanges = true;
+      });
+      StorageService.instance.saveOrUpdateNote(_currentNote);
+    }
   }
 
   void _openMathAI() {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../models/note.dart';
+import '../models/note_template.dart';
 import '../services/sharing_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/note_card.dart';
@@ -74,24 +76,24 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadNotes();
   }
 
-  void _createNewNoteWithTemplate() {
-    showDialog(
+  Future<void> _createNewNoteWithTemplate() async {
+    final template = await showDialog<NoteTemplate>(
       context: context,
-      builder: (ctx) => TemplatePickerDialog(
-        onTemplateSelected: (template) {
-          final newNote = Note(
-            id: '', // Will be assigned UUID in NoteEditScreen
-            title: template.defaultTitle,
-            content: template.defaultContent,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-            paperType: template.paperType,
-            templateImageBase64: template.backgroundImageBase64,
-          );
-          _openNoteEditor(newNote);
-        },
-      ),
+      builder: (ctx) => const TemplatePickerDialog(),
     );
+
+    if (template != null && mounted) {
+      final newNote = Note(
+        id: const Uuid().v4(),
+        title: template.defaultTitle,
+        content: template.defaultContent,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        paperType: template.paperType,
+        templateImageBase64: template.backgroundImageBase64,
+      );
+      _openNoteEditor(newNote);
+    }
   }
 
   void _showJoinLinkDialog() {
@@ -359,6 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_home_new_note',
         onPressed: _createNewNoteWithTemplate,
         icon: const Icon(Icons.add_rounded),
         label: const Text('Neue A4 Notiz'),
@@ -423,6 +426,20 @@ class _HomeScreenState extends State<HomeScreen> {
             _searchQuery.isNotEmpty ? 'Versuche einen anderen Suchbegriff' : 'Tippe auf "+", um deine erste Notiz zu schreiben',
             style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
           ),
+          if (_searchQuery.isEmpty) ...[
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1565C0),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: _createNewNoteWithTemplate,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Erste DIN A4 Notiz erstellen', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
         ],
       ),
     );

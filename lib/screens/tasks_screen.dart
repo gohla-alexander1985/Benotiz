@@ -445,6 +445,7 @@ class _TasksScreenState extends State<TasksScreen> {
               ],
             ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab_tasks_new_task',
         onPressed: () => _openTaskEditor(),
         icon: const Icon(Icons.add_task_rounded),
         label: const Text('Neue Aufgabe'),

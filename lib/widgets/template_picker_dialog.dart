@@ -5,11 +5,11 @@ import '../models/note_template.dart';
 import '../services/template_service.dart';
 
 class TemplatePickerDialog extends StatefulWidget {
-  final ValueChanged<NoteTemplate> onTemplateSelected;
+  final ValueChanged<NoteTemplate>? onTemplateSelected;
 
   const TemplatePickerDialog({
     super.key,
-    required this.onTemplateSelected,
+    this.onTemplateSelected,
   });
 
   @override
@@ -73,8 +73,10 @@ class _TemplatePickerDialogState extends State<TemplatePickerDialog> {
       );
 
       await TemplateService.instance.saveCustomTemplate(newTemplate);
-      widget.onTemplateSelected(newTemplate);
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context, newTemplate);
+        widget.onTemplateSelected?.call(newTemplate);
+      }
     }
   }
 
@@ -194,8 +196,8 @@ class _TemplatePickerDialogState extends State<TemplatePickerDialog> {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(14),
                               onTap: () {
-                                widget.onTemplateSelected(template);
-                                Navigator.pop(context);
+                                Navigator.pop(context, template);
+                                widget.onTemplateSelected?.call(template);
                               },
                               child: Padding(
                                 padding: const EdgeInsets.all(12.0),
