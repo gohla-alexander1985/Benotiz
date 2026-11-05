@@ -1,7 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:notes_app/main.dart';
+import 'package:notes_app/widgets/stylus_canvas_screen.dart';
 
 void main() {
   setUp(() async {
@@ -42,5 +44,42 @@ void main() {
     // Should now be inside NoteEditScreen with title and body fields
     expect(find.text('DIN A4 Notizvorlage wählen'), findsNothing);
     expect(find.text('Titel der Notiz...'), findsOneWidget);
+  });
+
+  testWidgets('StylusCanvasScreen eraser can be toggled and protects template lines',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(MaterialApp(
+      home: StylusCanvasScreen(
+        paperType: 'grid',
+        onSave: (strokes, img) {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final eraserFinder = find.text('Radierer');
+    expect(eraserFinder, findsOneWidget);
+    expect(find.text('Vorlagenlinien geschützt'), findsNothing);
+
+    // Ensure visible and tap on Radierer
+    await tester.ensureVisible(eraserFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(eraserFinder);
+    await tester.pumpAndSettle();
+
+    // Now eraser is active, protection badge should be visible
+    expect(find.text('Vorlagenlinien geschützt'), findsOneWidget);
+    final modeFinder = find.text('Ganze Striche');
+    expect(modeFinder, findsOneWidget);
+
+    // Toggle to precision mode
+    await tester.ensureVisible(modeFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(modeFinder);
+    await tester.pumpAndSettle();
+    expect(find.text('Präzision'), findsOneWidget);
   });
 }

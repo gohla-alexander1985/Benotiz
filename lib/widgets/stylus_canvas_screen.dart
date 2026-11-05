@@ -91,13 +91,17 @@ class StylusCanvasScreen extends StatefulWidget {
 
 class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   final List<DrawingStroke> _strokes = [];
-  final List<DrawingStroke> _redoStrokes = [];
+  final List<List<DrawingStroke>> _undoStack = [];
+  final List<List<DrawingStroke>> _redoStack = [];
   DrawingStroke? _currentStroke;
 
   Color _selectedColor = const Color(0xFF1565C0); // BEnotiz Blue
   double _strokeWidth = 3.5;
   PenStyle _selectedStyle = PenStyle.ballpoint;
   bool _isEraser = false;
+  String _eraserMode = 'object'; // 'object' (Ganze Striche) oder 'precision' (Teil-Striche)
+  double _eraserRadius = 24.0;
+  Offset? _currentEraserPos;
   bool _stylusOnlyMode = false; // Palm rejection
 
   // Ruler state
@@ -129,8 +133,114 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
     if (widget.initialDrawingData != null && widget.initialDrawingData!.isNotEmpty) {
       try {
         final List<dynamic> decoded = json.decode(widget.initialDrawingData!);
-        _strokes.addAll(decoded.map((item) => DrawingStroke.fromMap(item as Map<String, dynamic>)));
+        final loaded = decoded
+            .map((item) => DrawingStroke.fromMap(item as Map<String, dynamic>))
+            .where((s) => !s.isEraser) // Legacy-Radierer-Striche herausfiltern
+            .toList();
+        _strokes.addAll(loaded);
       } catch (_) {}
+    }
+  }
+
+  void _pushUndoSnapshot() {
+    _undoStack.add(_strokes
+        .map((s) => DrawingStroke(
+              points: List.from(s.points),
+              color: s.color,
+              width: s.width,
+              penStyle: s.penStyle,
+              isEraser: s.isEraser,
+            ))
+        .toList());
+    _redoStack.clear();
+    if (_undoStack.length > 40) {
+      _undoStack.removeAt(0);
+    }
+  }
+
+  double _distToSegment(Offset p, Offset a, Offset b) {
+    final l2 = (b - a).distanceSquared;
+    if (l2 == 0) return (p - a).distance;
+    final t = max(0.0, min(1.0, ((p.dx - a.dx) * (b.dx - a.dx) + (p.dy - a.dy) * (b.dy - a.dy)) / l2));
+    final projection = Offset(a.dx + t * (b.dx - a.dx), a.dy + t * (b.dy - a.dy));
+    return (p - projection).distance;
+  }
+
+  bool _strokeIntersectsPoint(DrawingStroke stroke, Offset p, double radius) {
+    if (stroke.points.isEmpty) return false;
+    final threshold = radius + (stroke.width / 2);
+    if (stroke.points.length == 1) {
+      return (stroke.points.first.offset - p).distance <= threshold;
+    }
+    for (int i = 1; i < stroke.points.length; i++) {
+      if (_distToSegment(p, stroke.points[i - 1].offset, stroke.points[i].offset) <= threshold) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _eraseAt(Offset pos) {
+    _currentEraserPos = pos;
+    final radius = _eraserRadius;
+    bool modified = false;
+
+    if (_eraserMode == 'object') {
+      // Objekt-Radierer: Ganze berührte Striche sauber entfernen (Vorlagenlinien bleiben 100% erhalten)
+      final remaining = <DrawingStroke>[];
+      for (final stroke in _strokes) {
+        if (_strokeIntersectsPoint(stroke, pos, radius)) {
+          modified = true;
+        } else {
+          remaining.add(stroke);
+        }
+      }
+      if (modified) {
+        setState(() {
+          _strokes.clear();
+          _strokes.addAll(remaining);
+        });
+      }
+    } else {
+      // Präzisions-Radierer: Striche an Berührungspunkten teilen / abschneiden
+      final updatedStrokes = <DrawingStroke>[];
+      for (final stroke in _strokes) {
+        if (!_strokeIntersectsPoint(stroke, pos, radius)) {
+          updatedStrokes.add(stroke);
+          continue;
+        }
+        modified = true;
+        final pieces = <List<DrawingPoint>>[];
+        var currentPiece = <DrawingPoint>[];
+        for (final pt in stroke.points) {
+          if ((pt.offset - pos).distance > radius) {
+            currentPiece.add(pt);
+          } else {
+            if (currentPiece.length >= 2) {
+              pieces.add(currentPiece);
+            }
+            currentPiece = <DrawingPoint>[];
+          }
+        }
+        if (currentPiece.length >= 2) {
+          pieces.add(currentPiece);
+        }
+
+        for (final piece in pieces) {
+          updatedStrokes.add(DrawingStroke(
+            points: piece,
+            color: stroke.color,
+            width: stroke.width,
+            penStyle: stroke.penStyle,
+          ));
+        }
+      }
+      if (modified) {
+        setState(() {
+          _strokes.clear();
+          _strokes.addAll(updatedStrokes);
+        });
+      }
     }
   }
 
@@ -183,25 +293,41 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
     }
 
     final isHardwareEraser = event.kind == PointerDeviceKind.invertedStylus || _isEraser;
+
+    if (isHardwareEraser) {
+      _pushUndoSnapshot();
+      setState(() {
+        _eraseAt(event.localPosition);
+      });
+      return;
+    }
+
     final snappedPos = _applyRulerSnapping(event.localPosition);
+    _pushUndoSnapshot();
 
     setState(() {
-      _redoStrokes.clear();
       _currentStroke = DrawingStroke(
         points: [DrawingPoint(offset: snappedPos, pressure: event.pressure)],
         color: _selectedStyle == PenStyle.highlighter
             ? _selectedColor.withAlpha(85)
-            : (isHardwareEraser ? Colors.white : _selectedColor),
-        width: isHardwareEraser
-            ? 26.0
-            : (_selectedStyle == PenStyle.highlighter ? 22.0 : _strokeWidth),
+            : _selectedColor,
+        width: _selectedStyle == PenStyle.highlighter ? 22.0 : _strokeWidth,
         penStyle: _selectedStyle,
-        isEraser: isHardwareEraser,
+        isEraser: false,
       );
     });
   }
 
   void _onPointerMove(PointerMoveEvent event) {
+    final isHardwareEraser = event.kind == PointerDeviceKind.invertedStylus || _isEraser;
+
+    if (isHardwareEraser) {
+      setState(() {
+        _eraseAt(event.localPosition);
+      });
+      return;
+    }
+
     if (_currentStroke == null) return;
     final snappedPos = _applyRulerSnapping(event.localPosition);
     setState(() {
@@ -213,6 +339,15 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   void _onPointerUp(PointerUpEvent event) {
+    final isHardwareEraser = event.kind == PointerDeviceKind.invertedStylus || _isEraser;
+
+    if (isHardwareEraser) {
+      setState(() {
+        _currentEraserPos = null;
+      });
+      return;
+    }
+
     if (_currentStroke == null) return;
     setState(() {
       _strokes.add(_currentStroke!);
@@ -221,20 +356,45 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   void _undo() {
-    if (_strokes.isNotEmpty) {
-      setState(() => _redoStrokes.add(_strokes.removeLast()));
+    if (_undoStack.isNotEmpty) {
+      setState(() {
+        _redoStack.add(_strokes
+            .map((s) => DrawingStroke(
+                  points: List.from(s.points),
+                  color: s.color,
+                  width: s.width,
+                  penStyle: s.penStyle,
+                  isEraser: s.isEraser,
+                ))
+            .toList());
+        _strokes.clear();
+        _strokes.addAll(_undoStack.removeLast());
+      });
     }
   }
 
   void _redo() {
-    if (_redoStrokes.isNotEmpty) {
-      setState(() => _strokes.add(_redoStrokes.removeLast()));
+    if (_redoStack.isNotEmpty) {
+      setState(() {
+        _undoStack.add(_strokes
+            .map((s) => DrawingStroke(
+                  points: List.from(s.points),
+                  color: s.color,
+                  width: s.width,
+                  penStyle: s.penStyle,
+                  isEraser: s.isEraser,
+                ))
+            .toList());
+        _strokes.clear();
+        _strokes.addAll(_redoStack.removeLast());
+      });
     }
   }
 
   void _clearCanvas() {
+    if (_strokes.isEmpty) return;
+    _pushUndoSnapshot();
     setState(() {
-      _redoStrokes.addAll(_strokes);
       _strokes.clear();
     });
   }
@@ -283,39 +443,27 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
           icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Row(
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.draw_rounded, color: Color(0xFF1565C0)),
-            const SizedBox(width: 8),
-            const Text(
+            Icon(Icons.draw_rounded, color: Color(0xFF1565C0)),
+            SizedBox(width: 8),
+            Text(
               'Stifte & Lineale',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(width: 12),
-            // Palm Rejection Pill
-            Tooltip(
-              message: 'Handballen auf Display ignorieren (nur Stift)',
-              child: FilterChip(
-                selectedColor: const Color(0xFFD0E4FF),
-                avatar: Icon(
-                  Icons.gesture_rounded,
-                  size: 16,
-                  color: _stylusOnlyMode ? const Color(0xFF1565C0) : Colors.grey,
-                ),
-                label: Text(
-                  'Handballen',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: _stylusOnlyMode ? const Color(0xFF1565C0) : Colors.grey.shade700,
-                  ),
-                ),
-                selected: _stylusOnlyMode,
-                onSelected: (val) => setState(() => _stylusOnlyMode = val),
-              ),
             ),
           ],
         ),
         actions: [
+          // Palm Rejection Toggle Button
+          IconButton(
+            icon: Icon(
+              Icons.do_not_touch_rounded,
+              color: _stylusOnlyMode ? const Color(0xFF1565C0) : Colors.grey.shade600,
+            ),
+            tooltip: _stylusOnlyMode ? 'Nur Stift aktiv (Handballen ignoriert)' : 'Stift & Finger aktiv',
+            onPressed: () => setState(() => _stylusOnlyMode = !_stylusOnlyMode),
+          ),
           // Lineal Toggle
           IconButton(
             icon: Icon(
@@ -328,12 +476,12 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
           IconButton(
             icon: const Icon(Icons.undo_rounded),
             tooltip: 'Rückgängig',
-            onPressed: _strokes.isNotEmpty ? _undo : null,
+            onPressed: _undoStack.isNotEmpty ? _undo : null,
           ),
           IconButton(
             icon: const Icon(Icons.redo_rounded),
             tooltip: 'Wiederholen',
-            onPressed: _redoStrokes.isNotEmpty ? _redo : null,
+            onPressed: _redoStack.isNotEmpty ? _redo : null,
           ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_rounded),
@@ -418,6 +566,95 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
 
                       const SizedBox(width: 14),
 
+                      // Eraser Options (Mode & Radius)
+                      if (_isEraser) ...[
+                        InkWell(
+                          onTap: () => setState(() => _eraserMode = _eraserMode == 'object' ? 'precision' : 'object'),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE3F2FD),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF1565C0)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _eraserMode == 'object' ? Icons.select_all_rounded : Icons.content_cut_rounded,
+                                  size: 15,
+                                  color: const Color(0xFF1565C0),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _eraserMode == 'object' ? 'Ganze Striche' : 'Präzision',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1565C0),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Eraser radius buttons
+                        Row(
+                          children: [14.0, 24.0, 40.0].map((r) {
+                            final isSelected = _eraserRadius == r;
+                            return InkWell(
+                              onTap: () => setState(() => _eraserRadius = r),
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isSelected ? const Color(0xFF1565C0) : Colors.transparent,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Container(
+                                  width: r == 14.0 ? 12 : (r == 24.0 ? 18 : 24),
+                                  height: r == 14.0 ? 12 : (r == 24.0 ? 18 : 24),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color(0xFF1565C0),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(width: 12),
+                        // Badge: Vorlagenlinien geschützt
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFA5D6A7)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.verified_user_rounded, size: 14, color: Colors.green.shade800),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Vorlagenlinien geschützt',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green.shade800,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
                       // Stroke Width selector (2, 4, 7, 12 px)
                       if (!_isEraser && _selectedStyle != PenStyle.highlighter) ...[
                         Row(
@@ -492,13 +729,26 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                   onPointerDown: _onPointerDown,
                   onPointerMove: _onPointerMove,
                   onPointerUp: _onPointerUp,
-                  child: CustomPaint(
-                    painter: A4PaperPainter(paperType: widget.paperType),
-                    foregroundPainter: StylusCanvasPainter(
-                      strokes: _strokes,
-                      currentStroke: _currentStroke,
-                    ),
-                    size: Size.infinite,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CustomPaint(
+                        painter: A4PaperPainter(paperType: widget.paperType),
+                        foregroundPainter: StylusCanvasPainter(
+                          strokes: _strokes,
+                          currentStroke: _currentStroke,
+                        ),
+                        size: Size.infinite,
+                      ),
+                      if (_currentEraserPos != null)
+                        CustomPaint(
+                          painter: EraserCursorPainter(
+                            position: _currentEraserPos!,
+                            radius: _eraserRadius,
+                          ),
+                          size: Size.infinite,
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -759,10 +1009,6 @@ class StylusCanvasPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
 
-    if (stroke.isEraser) {
-      paint.blendMode = BlendMode.clear;
-    }
-
     final path = Path();
     path.moveTo(stroke.points.first.offset.dx, stroke.points.first.offset.dy);
 
@@ -812,4 +1058,30 @@ class StylusCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant StylusCanvasPainter oldDelegate) => true;
+}
+
+class EraserCursorPainter extends CustomPainter {
+  final Offset position;
+  final double radius;
+
+  EraserCursorPainter({required this.position, required this.radius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fillPaint = Paint()
+      ..color = const Color(0x331565C0)
+      ..style = PaintingStyle.fill;
+
+    final borderPaint = Paint()
+      ..color = const Color(0xFF1565C0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    canvas.drawCircle(position, radius, fillPaint);
+    canvas.drawCircle(position, radius, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant EraserCursorPainter oldDelegate) =>
+      oldDelegate.position != position || oldDelegate.radius != radius;
 }
