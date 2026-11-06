@@ -237,8 +237,26 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : Stack(
               children: [
+                // Benker Firmenlogo Wasserzeichen
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Opacity(
+                        opacity: 0.08,
+                        child: Image.asset(
+                          'assets/images/benker_logo.png',
+                          width: 380,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) => const SizedBox(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Column(
+                  children: [
                 // Search Bar
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -360,6 +378,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
+          ],
+        ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab_home_new_note',
         onPressed: _createNewNoteWithTemplate,
