@@ -23,10 +23,38 @@ class _MathAIDialogState extends State<MathAIDialog> {
   String? _solution;
   bool _useDrawingImage = true;
 
+  static const List<String> _quickExamples = [
+    '15% von 250',
+    '250 + 19% MwSt',
+    '3x + 12 = 48',
+    '(a + b)²',
+    'Kreis r=5',
+    'Rechteck 12 x 8',
+    'Pythagoras 3, 4',
+    'U = R * I',
+    'Zinsen für 5000 € bei 3.5% über 4 Jahre',
+  ];
+
   @override
   void initState() {
     super.initState();
-    _queryController = TextEditingController(text: widget.initialText ?? '');
+    String defaultText = '';
+    if (widget.initialText != null && widget.initialText!.trim().isNotEmpty) {
+      final raw = widget.initialText!.trim();
+      final lines = raw.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+      if (lines.length == 1 && lines.first.length <= 80) {
+        defaultText = lines.first;
+      } else {
+        // Look for a line containing math symbols
+        final mathRegex = RegExp(r'[=+\-*/^%√]|sqrt|kreis|rechteck|zinsen|dreisatz', caseSensitive: false);
+        final mathLine = lines.firstWhere(
+          (l) => mathRegex.hasMatch(l) && l.length <= 80,
+          orElse: () => '',
+        );
+        defaultText = mathLine;
+      }
+    }
+    _queryController = TextEditingController(text: defaultText);
     _useDrawingImage = widget.drawingImageBase64 != null;
   }
 
@@ -36,13 +64,17 @@ class _MathAIDialogState extends State<MathAIDialog> {
     super.dispose();
   }
 
-  Future<void> _solveMath({bool enhanceOnly = false}) async {
-    final query = _queryController.text.trim();
+  Future<void> _solveMath({bool enhanceOnly = false, String? directQuery}) async {
+    final query = directQuery ?? _queryController.text.trim();
     if (query.isEmpty && (!_useDrawingImage || widget.drawingImageBase64 == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Bitte gib eine Formel oder Frage ein, oder nutze eine Stift-Zeichnung.')),
       );
       return;
+    }
+
+    if (directQuery != null) {
+      _queryController.text = directQuery;
     }
 
     setState(() => _isSolving = true);
@@ -143,12 +175,43 @@ class _MathAIDialogState extends State<MathAIDialog> {
                 // Input Field
                 TextField(
                   controller: _queryController,
-                  maxLines: 3,
+                  maxLines: 2,
                   decoration: InputDecoration(
                     labelText: 'Formel oder mathematische Fragestellung',
-                    hintText: 'z.B.: "2x + 5 = 17" oder "Wie berechne ich das Volumen eines Kegels mit r=4, h=9?"',
+                    hintText: 'z.B.: "2x + 5 = 17" oder "15% von 250" oder "(a+b)^2"',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    suffixIcon: _queryController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 20),
+                            onPressed: () {
+                              setState(() {
+                                _queryController.clear();
+                              });
+                            },
+                          )
+                        : null,
                   ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 8),
+
+                // Quick Presets
+                Text(
+                  'Schnellbeispiele zum Anklicken:',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _quickExamples.map((ex) {
+                    return ActionChip(
+                      label: Text(ex, style: const TextStyle(fontSize: 11)),
+                      backgroundColor: const Color(0xFFF0F4F8),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                      onPressed: _isSolving ? null : () => _solveMath(directQuery: ex),
+                    );
+                  }).toList(),
                 ),
                 const SizedBox(height: 14),
 

@@ -5,8 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:notes_app/main.dart';
 import 'package:notes_app/models/note.dart';
 import 'package:notes_app/models/task_item.dart';
+import 'package:notes_app/services/ai_service.dart';
+import 'package:notes_app/services/math_engine.dart';
 import 'package:notes_app/services/storage_service.dart';
 import 'package:notes_app/services/task_service.dart';
+import 'package:notes_app/services/text_analysis_engine.dart';
 import 'package:notes_app/widgets/stylus_canvas_screen.dart';
 
 void main() {
@@ -126,5 +129,64 @@ void main() {
 
     // Now inside NoteEditScreen
     expect(find.text('Wichtige Details zum Tiefziehen'), findsOneWidget);
+  });
+
+  group('MathEngine & TextAnalysisEngine tests', () {
+    test('MathEngine correctly solves basic arithmetic', () {
+      final res = MathEngine.instance.solve('(45 + 15) * 8 / 2');
+      expect(res, contains('240'));
+    });
+
+    test('MathEngine correctly solves percentage calculations', () {
+      final p1 = MathEngine.instance.solve('15% von 200');
+      expect(p1, contains('30'));
+
+      final p2 = MathEngine.instance.solve('200 + 19% MwSt');
+      expect(p2, contains('238'));
+
+      final p3 = MathEngine.instance.solve('500 - 20% Rabatt');
+      expect(p3, contains('400'));
+    });
+
+    test('MathEngine solves linear equations', () {
+      final res = MathEngine.instance.solve('2x + 6 = 18');
+      expect(res, contains('x = 6'));
+    });
+
+    test('MathEngine solves geometry and formula problems', () {
+      final kreis = MathEngine.instance.solve('Kreis r=5');
+      expect(kreis, contains('78,54'));
+
+      final pyth = MathEngine.instance.solve('Pythagoras 3, 4');
+      expect(pyth, contains('5'));
+
+      final binom = MathEngine.instance.completeFormula('(a+b)^2');
+      expect(binom, contains('a² + 2ab + b²'));
+    });
+
+    test('TextAnalysisEngine extracts summary, keywords, and action items', () {
+      const text = '''
+Besprechung mit Benker GmbH & Co. KG in Dietenhofen.
+Wir müssen die neuen Werkzeuge dringend bis Freitag prüfen und freigeben.
+Die Qualität der Tiefziehteile ist hervorragend.
+Bitte Herrn Schmidt anrufen und das Protokoll versenden.
+''';
+
+      final analysis = TextAnalysisEngine.instance.analyze(text);
+      expect(analysis, contains('Kernaussagen'));
+      expect(analysis, contains('Schlagwörter'));
+      expect(analysis, contains('Handlungsfelder'));
+      expect(analysis, contains('Kennzahlen'));
+    });
+
+    test('AIService integrates MathEngine and TextAnalysisEngine offline', () async {
+      final mathRes = await AIService.instance.solveMathProblem(query: '3x + 12 = 48');
+      expect(mathRes, contains('x = 12'));
+
+      final summaryRes = await AIService.instance.summarizeText(
+        'Projektmeeting zur Produktionslinie. Wir müssen die Maschinen morgen warten.',
+      );
+      expect(summaryRes, contains('Kernaussagen'));
+    });
   });
 }

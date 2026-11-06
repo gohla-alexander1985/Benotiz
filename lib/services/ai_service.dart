@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task_item.dart';
+import 'math_engine.dart';
+import 'text_analysis_engine.dart';
 
 class AIService {
   static final AIService instance = AIService._internal();
@@ -23,27 +25,28 @@ class AIService {
     await prefs.setString(_apiKeyPrefs, key.trim());
   }
 
-  /// Analyzes and summarizes text using Gemini or smart fallback
+  /// Analyzes and summarizes text using Gemini or smart local analysis engine
   Future<String> summarizeText(String text) async {
     if (text.trim().isEmpty) return 'Kein Text zum Analysieren vorhanden.';
 
     final apiKey = await getApiKey();
     if (apiKey != null && apiKey.isNotEmpty) {
       try {
-        final prompt = 'Bitte fasse folgenden Notiztext prägnant und übersichtlich auf Deutsch zusammen. '
-            'Nutze Aufzählungspunkte für Kernpunkte:\n\n$text';
+        final prompt = 'Bitte führe eine gründliche deutsche Textanalyse und Zusammenfassung für folgenden Notiztext durch. '
+            'Gliedere deine Antwort übersichtlich in:\n'
+            '1) 📌 Kernaussagen (Executive Summary)\n'
+            '2) 🏷️ Wichtigste Schlagwörter / Themen\n'
+            '3) ⚡ Handlungsfelder & erkannte Aufgaben\n'
+            '4) 📊 Stil- und Lesbarkeits-Einschätzung\n\n'
+            'Text:\n$text';
         return await _callGeminiText(apiKey, prompt);
       } catch (e) {
         // Fallback to local processing if API request fails
       }
     }
 
-    final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
-    final firstFew = lines.take(3).join(' ');
-    return '📝 **KI-Zusammenfassung (Lokaler Modus):**\n\n'
-        '• Hauptinhalt: ${firstFew.length > 120 ? "${firstFew.substring(0, 120)}..." : firstFew}\n'
-        '• Umfang: ${text.length} Zeichen, ${text.split(RegExp(r'\s+')).length} Wörter.\n\n'
-        '*(Tipp: Hinterlege deinen kostenlosen Google Gemini API-Schlüssel in den Einstellungen für vollwertige LLM-Analysen!)*';
+    // High quality offline NLP analysis
+    return TextAnalysisEngine.instance.analyze(text);
   }
 
   /// Improves grammar and writing style
@@ -61,8 +64,7 @@ class AIService {
       }
     }
 
-    return '✨ **Verbesserter Text:**\n\n$text\n\n'
-        '*(Gemini API-Schlüssel nicht eingerichtet – Originaltext unverändert beibehalten)*';
+    return TextAnalysisEngine.instance.improve(text);
   }
 
   /// Solves mathematical formulas, equations, or word problems (with optional handwriting image)
@@ -131,9 +133,7 @@ class AIService {
       } catch (_) {}
     }
 
-    return '🧮 **Formel-Analyse (Lokaler Modus):**\n\n'
-        '• Eingegebene Formel: `$formula`\n'
-        '• Tipp: Setze Klammern und Operatoren eindeutig (+, -, *, /) oder richte deinen Gemini API-Key für symbolische Algebra ein.';
+    return MathEngine.instance.completeFormula(formula);
   }
 
   /// Transcribes handwriting from stylus drawing canvas into digital text (OCR)
@@ -354,18 +354,6 @@ class AIService {
   }
 
   String _localMathSolver(String query) {
-    // Attempt basic arithmetic calculation
-    try {
-      final sanitized = query.replaceAll(RegExp(r'[^0-9+\-*/().]'), '');
-      if (sanitized.isNotEmpty) {
-        return '🧮 **Mathematisches Ergebnis (Offline-Modus):**\n\n'
-            '• Frage / Formel: $query\n'
-            '• Rechenweg: Basierend auf den Operatoren `$sanitized`\n\n'
-            '*(Tipp: Für komplexe Gleichungssysteme, Ableitungen und Integrale den kostenlosen Google Gemini API-Key in den Einstellungen hinterlegen!)*';
-      }
-    } catch (_) {}
-
-    return '🧮 **Mathematische Analyse:**\n\nAufgabe: $query\n\n'
-        'Verbinde die App mit deinem Gemini API-Schlüssel für sofortige Schritt-für-Schritt-Lösungen aller mathematischen Formeln und Textaufgaben!';
+    return MathEngine.instance.solve(query);
   }
 }

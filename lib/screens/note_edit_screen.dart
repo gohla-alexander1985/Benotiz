@@ -368,6 +368,100 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
     );
   }
 
+  void _showAIMenu() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE3F2FD),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.auto_awesome, color: Color(0xFF1565C0)),
+                      ),
+                      const SizedBox(width: 12),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('KI-Assistent & Analyse', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          Text('Wähle eine Aktion für deine Notiz', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE8F5E9),
+                    child: Icon(Icons.analytics_rounded, color: Color(0xFF2E7D32)),
+                  ),
+                  title: const Text('Text analysieren & zusammenfassen', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Kernaussagen, Schlagwörter, Aufgaben & Lesbarkeitsindex'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _handleAIAction('summarize');
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFFFF3E0),
+                    child: Icon(Icons.spellcheck_rounded, color: Color(0xFFE65100)),
+                  ),
+                  title: const Text('Text verbessern & formatieren', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Grammatik, Gliederung und Aufzählungspunkte optimieren'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _handleAIAction('improve');
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFEDE7F6),
+                    child: Icon(Icons.checklist_rtl_rounded, color: Color(0xFF512DA8)),
+                  ),
+                  title: const Text('Aufgaben automatisch extrahieren', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('To-Dos erkennen und direkt in Aufgabenliste übertragen'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _handleAIAction('extract_tasks');
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE3F2FD),
+                    child: Icon(Icons.calculate_rounded, color: Color(0xFF1565C0)),
+                  ),
+                  title: const Text('Mathe-KI & Formelrechner', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Formeln lösen, Prozentrechnung, Gleichungen oder Geometrie'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openMathAI();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _handleAIAction(String action) async {
     final text = _contentController.text.trim();
     if (text.isEmpty && action != 'record') {
@@ -383,7 +477,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
       final summary = await AIService.instance.summarizeText(text);
       if (mounted) {
         setState(() => _isAIBusy = false);
-        _showAIResultDialog('Zusammenfassung', summary, onAppend: () {
+        _showAIResultDialog('Textanalyse & Zusammenfassung', summary, onAppend: () {
           setState(() {
             _contentController.text = '${_contentController.text}\n\n$summary';
             _hasChanges = true;
@@ -424,15 +518,31 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            const Icon(Icons.auto_awesome, color: Color(0xFF1565C0)),
-            const SizedBox(width: 8),
-            Text(title),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3F2FD),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.auto_awesome, color: Color(0xFF1565C0), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ),
           ],
         ),
-        content: SingleChildScrollView(
-          child: Text(content, style: const TextStyle(height: 1.4)),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540, maxHeight: 460),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              content,
+              style: const TextStyle(height: 1.45, fontSize: 14),
+            ),
+          ),
         ),
         actions: [
           TextButton(
@@ -441,7 +551,11 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
           ),
           if (onAppend != null)
             ElevatedButton.icon(
-              icon: const Icon(Icons.add),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1565C0),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.add, size: 18),
               label: const Text('In Notiz übernehmen'),
               onPressed: () {
                 onAppend();
@@ -988,7 +1102,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                 onSearch: () {
                   setState(() => _isSearching = !_isSearching);
                 },
-                onOpenAI: () => _handleAIAction('summarize'),
+                onOpenAI: _showAIMenu,
               ),
             ],
           ),
