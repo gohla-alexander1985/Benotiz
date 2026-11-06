@@ -181,7 +181,11 @@ class AIService {
   }
 
   /// Extracts actionable tasks from a note text
-  Future<List<TaskItem>> extractTasksFromText(String noteTitle, String text) async {
+  Future<List<TaskItem>> extractTasksFromText(
+    String noteTitle,
+    String text, {
+    String? noteId,
+  }) async {
     final apiKey = await getApiKey();
     if (apiKey != null && apiKey.isNotEmpty) {
       try {
@@ -203,6 +207,8 @@ class AIService {
             priority: item['priority'] as String? ?? 'medium',
             dueDate: due,
             reminderDateTime: due.subtract(const Duration(hours: 2)),
+            linkedNoteId: noteId,
+            linkedNoteTitle: noteTitle.isNotEmpty ? noteTitle : 'Notiz',
           );
         }).toList();
       } catch (_) {}
@@ -223,6 +229,8 @@ class AIService {
             title: taskTitle,
             priority: taskTitle.toLowerCase().contains('dringend') ? 'high' : 'medium',
             dueDate: DateTime.now().add(const Duration(days: 1)),
+            linkedNoteId: noteId,
+            linkedNoteTitle: noteTitle.isNotEmpty ? noteTitle : 'Notiz',
           ));
         }
       }
@@ -233,6 +241,8 @@ class AIService {
         title: noteTitle.isNotEmpty ? 'Aufgabe zu: $noteTitle' : 'Notiz überprüfen',
         dueDate: DateTime.now().add(const Duration(days: 1)),
         priority: 'medium',
+        linkedNoteId: noteId,
+        linkedNoteTitle: noteTitle.isNotEmpty ? noteTitle : 'Notiz',
       ));
     }
 

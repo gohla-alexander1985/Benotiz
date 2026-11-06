@@ -12,6 +12,7 @@ class TaskItem {
   final String? assignedTo; // user name or email
   final String? assignedGroup; // e.g. "Team", "Familie", "Projekt"
   final String? linkedNoteId;
+  final String? linkedNoteTitle;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -26,6 +27,7 @@ class TaskItem {
     this.assignedTo,
     this.assignedGroup,
     this.linkedNoteId,
+    this.linkedNoteTitle,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -39,6 +41,7 @@ class TaskItem {
     String? assignedTo,
     String? assignedGroup,
     String? linkedNoteId,
+    String? linkedNoteTitle,
   }) {
     final now = DateTime.now();
     return TaskItem(
@@ -52,6 +55,7 @@ class TaskItem {
       assignedTo: assignedTo,
       assignedGroup: assignedGroup,
       linkedNoteId: linkedNoteId,
+      linkedNoteTitle: linkedNoteTitle,
       createdAt: now,
       updatedAt: now,
     );
@@ -73,6 +77,7 @@ class TaskItem {
     String? assignedTo,
     String? assignedGroup,
     String? linkedNoteId,
+    String? linkedNoteTitle,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -87,6 +92,7 @@ class TaskItem {
       assignedTo: assignedTo ?? this.assignedTo,
       assignedGroup: assignedGroup ?? this.assignedGroup,
       linkedNoteId: linkedNoteId ?? this.linkedNoteId,
+      linkedNoteTitle: linkedNoteTitle ?? this.linkedNoteTitle,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -104,6 +110,7 @@ class TaskItem {
       'assignedTo': assignedTo,
       'assignedGroup': assignedGroup,
       'linkedNoteId': linkedNoteId,
+      'linkedNoteTitle': linkedNoteTitle,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -123,6 +130,7 @@ class TaskItem {
       assignedTo: map['assignedTo'] as String?,
       assignedGroup: map['assignedGroup'] as String?,
       linkedNoteId: map['linkedNoteId'] as String?,
+      linkedNoteTitle: map['linkedNoteTitle'] as String?,
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(map['updatedAt'] as String? ?? '') ?? DateTime.now(),
     );

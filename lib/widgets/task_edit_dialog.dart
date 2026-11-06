@@ -189,6 +189,34 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                 ),
                 const SizedBox(height: 20),
 
+                if (widget.task?.linkedNoteTitle != null && widget.task!.linkedNoteTitle!.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE3F2FD),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF90CAF9)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.note_alt_rounded, size: 16, color: Color(0xFF1565C0)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Entstammt aus Notiz: "${widget.task!.linkedNoteTitle}"',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1565C0),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
                 // Title
                 TextField(
                   controller: _titleController,

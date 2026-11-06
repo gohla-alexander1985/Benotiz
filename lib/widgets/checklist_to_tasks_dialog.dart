@@ -83,6 +83,7 @@ class _ChecklistToTasksDialogState extends State<ChecklistToTasksDialog> {
         assignedTo: _assignedUser,
         assignedGroup: _selectedGroup,
         linkedNoteId: widget.noteId,
+        linkedNoteTitle: widget.noteTitle.isNotEmpty ? widget.noteTitle : 'Unbenannte Notiz',
       );
     }).toList();
 

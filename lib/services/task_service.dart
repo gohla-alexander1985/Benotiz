@@ -99,6 +99,7 @@ class TaskService {
     final text = '📌 Neue Aufgabe: "${task.title}"\n\n'
         '• Fällig am: $dueStr\n'
         '• Priorität: ${task.priority.toUpperCase()}\n'
+        '${task.linkedNoteTitle != null && task.linkedNoteTitle!.isNotEmpty ? "• Entstammt Notiz: \"${task.linkedNoteTitle}\"\n" : ""}'
         '${task.assignedTo != null && task.assignedTo!.isNotEmpty ? "• Zugewiesen an: ${task.assignedTo}\n" : ""}'
         '${task.assignedGroup != null && task.assignedGroup!.isNotEmpty ? "• Gruppe: ${task.assignedGroup}\n" : ""}'
         '${task.description.isNotEmpty ? "• Details: ${task.description}\n" : ""}\n'

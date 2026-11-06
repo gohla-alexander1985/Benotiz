@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/task_item.dart';
 import '../services/ai_service.dart';
+import '../services/storage_service.dart';
 import '../services/task_service.dart';
 import '../widgets/task_edit_dialog.dart';
+import 'note_edit_screen.dart';
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key});
@@ -53,6 +55,21 @@ class _TasksScreenState extends State<TasksScreen> {
         onSaved: (_) => _loadData(),
       ),
     );
+  }
+
+  Future<void> _openLinkedNote(String noteId) async {
+    final notes = await StorageService.instance.loadNotes();
+    final noteMatches = notes.where((n) => n.id == noteId);
+
+    if (noteMatches.isNotEmpty && mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (ctx) => NoteEditScreen(note: noteMatches.first)),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ursprüngliche Notiz wurde möglicherweise gelöscht.')),
+      );
+    }
   }
 
   void _showAIExtractPrompt() {
@@ -414,6 +431,47 @@ class _TasksScreenState extends State<TasksScreen> {
                                                               fontSize: 11, color: Colors.teal),
                                                         ),
                                                       ],
+                                                    ),
+                                                  ),
+
+                                                // Originating Note Badge
+                                                if (task.linkedNoteTitle != null &&
+                                                    task.linkedNoteTitle!.isNotEmpty)
+                                                  InkWell(
+                                                    onTap: task.linkedNoteId != null
+                                                        ? () => _openLinkedNote(task.linkedNoteId!)
+                                                        : null,
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.symmetric(
+                                                          horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFE3F2FD),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                        border: Border.all(
+                                                            color: const Color(0xFFBBDEFB)),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          const Icon(Icons.note_alt_rounded,
+                                                              size: 11, color: Color(0xFF1565C0)),
+                                                          const SizedBox(width: 4),
+                                                          Text(
+                                                            'Notiz: ${task.linkedNoteTitle}',
+                                                            style: const TextStyle(
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.w600,
+                                                              color: Color(0xFF1565C0),
+                                                            ),
+                                                          ),
+                                                          if (task.linkedNoteId != null) ...[
+                                                            const SizedBox(width: 2),
+                                                            const Icon(Icons.arrow_forward_rounded,
+                                                                size: 10, color: Color(0xFF1565C0)),
+                                                          ],
+                                                        ],
+                                                      ),
                                                     ),
                                                   ),
                                               ],

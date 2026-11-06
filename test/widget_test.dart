@@ -3,6 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:notes_app/main.dart';
+import 'package:notes_app/models/note.dart';
+import 'package:notes_app/models/task_item.dart';
+import 'package:notes_app/services/storage_service.dart';
+import 'package:notes_app/services/task_service.dart';
 import 'package:notes_app/widgets/stylus_canvas_screen.dart';
 
 void main() {
@@ -81,5 +85,46 @@ void main() {
     await tester.tap(modeFinder);
     await tester.pumpAndSettle();
     expect(find.text('Präzision'), findsOneWidget);
+  });
+
+  testWidgets('Task shows originating note badge and links to original note',
+      (WidgetTester tester) async {
+    final note = Note(
+      id: 'note_123',
+      title: 'Projekt Benker Besprechung',
+      content: 'Wichtige Details zum Tiefziehen',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    await StorageService.instance.saveOrUpdateNote(note);
+
+    final task = TaskItem.create(
+      title: 'Werkzeugträger freigeben',
+      linkedNoteId: note.id,
+      linkedNoteTitle: note.title,
+    );
+    await TaskService.instance.saveOrUpdateTask(task);
+
+    await tester.pumpWidget(const BEnotizApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Navigate to Aufgaben tab
+    await tester.tap(find.text('Aufgaben'));
+    await tester.pumpAndSettle();
+
+    // Check task title is visible
+    expect(find.text('Werkzeugträger freigeben'), findsOneWidget);
+
+    // Originating note badge must be visible with note title
+    final noteBadgeFinder = find.text('Notiz: Projekt Benker Besprechung');
+    expect(noteBadgeFinder, findsOneWidget);
+
+    // Tapping the note badge opens the note in editor
+    await tester.tap(noteBadgeFinder);
+    await tester.pumpAndSettle();
+
+    // Now inside NoteEditScreen
+    expect(find.text('Wichtige Details zum Tiefziehen'), findsOneWidget);
   });
 }

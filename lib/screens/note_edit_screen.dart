@@ -392,8 +392,9 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
       }
     } else if (action == 'extract_tasks') {
       final tasks = await AIService.instance.extractTasksFromText(
-        _titleController.text.trim(),
+        _titleController.text.trim().isNotEmpty ? _titleController.text.trim() : 'Notiz',
         text,
+        noteId: _currentNote.id,
       );
       await TaskService.instance.addTasks(tasks);
       if (mounted) {
