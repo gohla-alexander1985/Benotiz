@@ -33,7 +33,9 @@ jobs:
         run: flutter pub get
 
       - name: Build Web App
-        run: flutter build web --release --base-href="/Benotiz/"
+        run: |
+          flutter build web --release --base-href="/Benotiz/"
+          cp build/web/index.html build/web/404.html
 
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v3
