@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/task_item.dart';
 import '../services/task_service.dart';
+import 'task_share_dialog.dart';
 
 class TaskEditDialog extends StatefulWidget {
   final TaskItem? task;
@@ -116,8 +117,13 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
     await TaskService.instance.saveOrUpdateTask(task);
     widget.onSaved(task);
 
-    if (andShare) {
-      await TaskService.instance.shareTask(task);
+    if (andShare && mounted) {
+      Navigator.pop(context);
+      showDialog(
+        context: context,
+        builder: (_) => TaskShareDialog(task: task),
+      );
+      return;
     }
 
     if (mounted) Navigator.pop(context);

@@ -158,16 +158,48 @@ class _ShareDialogState extends State<ShareDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                // Quick Action Share
+                // Quick Action Share Buttons (E-Mail, WhatsApp, System)
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1565C0),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.email_outlined, size: 18),
+                        label: const Text('Per E-Mail'),
+                        onPressed: () => SharingService.instance.shareViaEmail(widget.note),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2E7D32),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                        label: const Text('Per WhatsApp'),
+                        onPressed: () => SharingService.instance.shareViaWhatsApp(widget.note),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    icon: const Icon(Icons.send_rounded),
-                    label: const Text('Link über Messenger / E-Mail teilen'),
+                    icon: const Icon(Icons.share_outlined, size: 18),
+                    label: const Text('Über andere Apps teilen...'),
                     onPressed: () => SharingService.instance.shareViaSystemDialog(widget.note),
                   ),
                 ),

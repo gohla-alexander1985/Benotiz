@@ -1,10 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import 'storage_service.dart';
 
 class SharingService {
+  static const String appBaseUrl = 'https://gohla-alexander1985.github.io/Benotiz';
   static final SharingService instance = SharingService._internal();
 
   SharingService._internal();
@@ -12,12 +14,46 @@ class SharingService {
   /// Generates or returns an existing share link for a note
   String generateShareLink(Note note) {
     final token = note.shareToken ?? const Uuid().v4().substring(0, 8);
-    return 'https://benotiz.app/n/${note.id}?token=$token&perm=${note.permission}';
+    return '$appBaseUrl/?note=${note.id}&token=$token&perm=${note.permission}';
   }
 
   /// Copies the invitation link to the system clipboard
   Future<void> copyLinkToClipboard(String link) async {
     await Clipboard.setData(ClipboardData(text: link));
+  }
+
+  /// Shares a note directly via Email
+  Future<bool> shareViaEmail(Note note) async {
+    final link = generateShareLink(note);
+    final subject = 'Einladung zur Notiz: ${note.title.isNotEmpty ? note.title : "Notiz"}';
+    final body = 'Hallo,\n\nich habe eine Notiz in BEnotiz mit dir geteilt:\n\n'
+        'Titel: "${note.title.isNotEmpty ? note.title : "Unbenannte Notiz"}"\n\n'
+        'Hier kannst du die Notiz direkt in BEnotiz öffnen und ansehen:\n$link\n';
+
+    final mailtoUri = Uri(
+      scheme: 'mailto',
+      queryParameters: {
+        'subject': subject,
+        'body': body,
+      },
+    );
+    try {
+      return await launchUrl(mailtoUri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Shares a note directly via WhatsApp
+  Future<bool> shareViaWhatsApp(Note note) async {
+    final link = generateShareLink(note);
+    final text = 'Hallo, ich habe eine Notiz in BEnotiz mit dir geteilt:\n"${note.title.isNotEmpty ? note.title : "Notiz"}"\n\n$link';
+    final waUrl = Uri.parse('https://api.whatsapp.com/send?text=${Uri.encodeComponent(text)}');
+    try {
+      return await launchUrl(waUrl, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Opens the native OS share dialog (WhatsApp, Mail, etc.)
@@ -37,13 +73,20 @@ class SharingService {
   Future<Note?> joinNoteFromLink(String urlString) async {
     try {
       final uri = Uri.parse(urlString.trim());
-      if (!uri.pathSegments.contains('n') || uri.pathSegments.isEmpty) {
+      String? noteId;
+
+      if (uri.queryParameters.containsKey('note')) {
+        noteId = uri.queryParameters['note'];
+      } else if (uri.pathSegments.contains('n')) {
+        final noteIndex = uri.pathSegments.indexOf('n');
+        if (noteIndex + 1 < uri.pathSegments.length) {
+          noteId = uri.pathSegments[noteIndex + 1];
+        }
+      }
+
+      if (noteId == null || noteId.isEmpty) {
         return null;
       }
-      
-      final noteIndex = uri.pathSegments.indexOf('n');
-      if (noteIndex + 1 >= uri.pathSegments.length) return null;
-      final noteId = uri.pathSegments[noteIndex + 1];
       final token = uri.queryParameters['token'] ?? 'guest-token';
       final perm = uri.queryParameters['perm'] ?? 'edit';
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/task_item.dart';
 import '../services/task_service.dart';
+import 'task_share_dialog.dart';
 
 class ChecklistToTasksDialog extends StatefulWidget {
   final String noteContent;
@@ -95,15 +96,26 @@ class _ChecklistToTasksDialogState extends State<ChecklistToTasksDialog> {
       final summary = '📌 Neue Aufgaben aus BEnotiz ("${widget.noteTitle}"):\n\n'
           '$taskListStr\n\n'
           '$groupStr'
-          'In BEnotiz ansehen: https://benotiz.app/tasks';
+          'In BEnotiz ansehen: ${TaskService.appBaseUrl}/?tasks=all';
 
-      await TaskService.instance.shareTask(TaskItem.create(
+      final pkgTask = TaskItem.create(
         title: 'Aufgabenpaket aus "${widget.noteTitle}"',
         description: summary,
         assignedGroup: _selectedGroup,
         assignedTo: _assignedUser,
         dueDate: _dueDate,
-      ));
+        linkedNoteId: widget.noteId,
+        linkedNoteTitle: widget.noteTitle,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (_) => TaskShareDialog(task: pkgTask),
+        );
+        return;
+      }
     }
 
     if (mounted) {

@@ -5,6 +5,7 @@ import '../services/ai_service.dart';
 import '../services/storage_service.dart';
 import '../services/task_service.dart';
 import '../widgets/task_edit_dialog.dart';
+import '../widgets/task_share_dialog.dart';
 import 'note_edit_screen.dart';
 
 class TasksScreen extends StatefulWidget {
@@ -54,6 +55,13 @@ class _TasksScreenState extends State<TasksScreen> {
         task: task,
         onSaved: (_) => _loadData(),
       ),
+    );
+  }
+
+  void _openShareTaskDialog(TaskItem task) {
+    showDialog(
+      context: context,
+      builder: (ctx) => TaskShareDialog(task: task),
     );
   }
 
@@ -484,7 +492,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                       IconButton(
                                         icon: const Icon(Icons.share_rounded, size: 18),
                                         tooltip: 'Aufgabe an Nutzer oder Gruppe versenden',
-                                        onPressed: () => TaskService.instance.shareTask(task),
+                                        onPressed: () => _openShareTaskDialog(task),
                                       ),
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline_rounded, size: 18),
