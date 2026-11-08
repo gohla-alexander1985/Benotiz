@@ -188,5 +188,48 @@ Bitte Herrn Schmidt anrufen und das Protokoll versenden.
       );
       expect(summaryRes, contains('Kernaussagen'));
     });
+
+    test('TaskItem serialization with comments and completedBy', () {
+      final comment = TaskComment.create(author: 'Kollege', text: 'Ist erledigt');
+      final task = TaskItem.create(
+        title: 'Musterteil prüfen',
+        creatorName: 'Alexander',
+      ).copyWith(
+        isCompleted: true,
+        completedBy: 'Kollege',
+        comments: [comment],
+      );
+
+      final map = task.toMap();
+      final restored = TaskItem.fromMap(map);
+
+      expect(restored.title, 'Musterteil prüfen');
+      expect(restored.creatorName, 'Alexander');
+      expect(restored.isCompleted, isTrue);
+      expect(restored.completedBy, 'Kollege');
+      expect(restored.comments.length, 1);
+      expect(restored.comments.first.author, 'Kollege');
+      expect(restored.comments.first.text, 'Ist erledigt');
+    });
+
+    test('TaskService encode and decode share link with payload', () {
+      final task = TaskItem.create(
+        title: 'Werkzeugwechsel vorbereiten',
+        description: 'Bitte bis 14 Uhr erledigen',
+        creatorName: 'Alexander',
+      );
+
+      final link = TaskService.instance.generateTaskShareLink(task);
+      expect(link, contains('import_task='));
+
+      final uri = Uri.parse(link);
+      final payload = uri.queryParameters['import_task']!;
+      final decoded = TaskService.instance.decodeTaskFromPayload(payload);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.title, 'Werkzeugwechsel vorbereiten');
+      expect(decoded.description, 'Bitte bis 14 Uhr erledigen');
+      expect(decoded.creatorName, 'Alexander');
+    });
   });
 }

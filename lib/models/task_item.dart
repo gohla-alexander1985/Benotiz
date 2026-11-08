@@ -1,6 +1,46 @@
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
+class TaskComment {
+  final String id;
+  final String author;
+  final String text;
+  final DateTime createdAt;
+
+  TaskComment({
+    required this.id,
+    required this.author,
+    required this.text,
+    required this.createdAt,
+  });
+
+  factory TaskComment.create({
+    required String author,
+    required String text,
+  }) {
+    return TaskComment(
+      id: const Uuid().v4(),
+      author: author.trim().isNotEmpty ? author.trim() : 'Empfänger',
+      text: text.trim(),
+      createdAt: DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'author': author,
+    'text': text,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory TaskComment.fromMap(Map<String, dynamic> map) => TaskComment(
+    id: map['id'] as String? ?? const Uuid().v4(),
+    author: map['author'] as String? ?? 'Empfänger',
+    text: map['text'] as String? ?? '',
+    createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
+  );
+}
+
 class TaskItem {
   final String id;
   final String title;
@@ -11,6 +51,10 @@ class TaskItem {
   final String priority; // 'low', 'medium', 'high'
   final String? assignedTo; // user name or email
   final String? assignedGroup; // e.g. "Team", "Familie", "Projekt"
+  final String? creatorName; // Sender / Ersteller
+  final String? completedBy; // Who marked it complete
+  final DateTime? completedAt;
+  final List<TaskComment> comments;
   final String? linkedNoteId;
   final String? linkedNoteTitle;
   final DateTime createdAt;
@@ -26,6 +70,10 @@ class TaskItem {
     this.priority = 'medium',
     this.assignedTo,
     this.assignedGroup,
+    this.creatorName,
+    this.completedBy,
+    this.completedAt,
+    this.comments = const [],
     this.linkedNoteId,
     this.linkedNoteTitle,
     required this.createdAt,
@@ -40,8 +88,10 @@ class TaskItem {
     String priority = 'medium',
     String? assignedTo,
     String? assignedGroup,
+    String? creatorName,
     String? linkedNoteId,
     String? linkedNoteTitle,
+    List<TaskComment> comments = const [],
   }) {
     final now = DateTime.now();
     return TaskItem(
@@ -54,6 +104,10 @@ class TaskItem {
       priority: priority,
       assignedTo: assignedTo,
       assignedGroup: assignedGroup,
+      creatorName: creatorName,
+      completedBy: null,
+      completedAt: null,
+      comments: comments,
       linkedNoteId: linkedNoteId,
       linkedNoteTitle: linkedNoteTitle,
       createdAt: now,
@@ -76,6 +130,10 @@ class TaskItem {
     String? priority,
     String? assignedTo,
     String? assignedGroup,
+    String? creatorName,
+    String? completedBy,
+    DateTime? completedAt,
+    List<TaskComment>? comments,
     String? linkedNoteId,
     String? linkedNoteTitle,
     DateTime? createdAt,
@@ -91,6 +149,10 @@ class TaskItem {
       priority: priority ?? this.priority,
       assignedTo: assignedTo ?? this.assignedTo,
       assignedGroup: assignedGroup ?? this.assignedGroup,
+      creatorName: creatorName ?? this.creatorName,
+      completedBy: completedBy ?? this.completedBy,
+      completedAt: completedAt ?? this.completedAt,
+      comments: comments ?? this.comments,
       linkedNoteId: linkedNoteId ?? this.linkedNoteId,
       linkedNoteTitle: linkedNoteTitle ?? this.linkedNoteTitle,
       createdAt: createdAt ?? this.createdAt,
@@ -109,6 +171,10 @@ class TaskItem {
       'priority': priority,
       'assignedTo': assignedTo,
       'assignedGroup': assignedGroup,
+      'creatorName': creatorName,
+      'completedBy': completedBy,
+      'completedAt': completedAt?.toIso8601String(),
+      'comments': comments.map((c) => c.toMap()).toList(),
       'linkedNoteId': linkedNoteId,
       'linkedNoteTitle': linkedNoteTitle,
       'createdAt': createdAt.toIso8601String(),
@@ -117,6 +183,11 @@ class TaskItem {
   }
 
   factory TaskItem.fromMap(Map<String, dynamic> map) {
+    final rawComments = map['comments'] as List<dynamic>?;
+    final commentsList = rawComments != null
+        ? rawComments.map((c) => TaskComment.fromMap(c as Map<String, dynamic>)).toList()
+        : <TaskComment>[];
+
     return TaskItem(
       id: map['id'] as String,
       title: map['title'] as String? ?? '',
@@ -129,6 +200,10 @@ class TaskItem {
       priority: map['priority'] as String? ?? 'medium',
       assignedTo: map['assignedTo'] as String?,
       assignedGroup: map['assignedGroup'] as String?,
+      creatorName: map['creatorName'] as String?,
+      completedBy: map['completedBy'] as String?,
+      completedAt: map['completedAt'] != null ? DateTime.tryParse(map['completedAt'] as String) : null,
+      comments: commentsList,
       linkedNoteId: map['linkedNoteId'] as String?,
       linkedNoteTitle: map['linkedNoteTitle'] as String?,
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),

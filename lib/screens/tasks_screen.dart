@@ -4,6 +4,7 @@ import '../models/task_item.dart';
 import '../services/ai_service.dart';
 import '../services/storage_service.dart';
 import '../services/task_service.dart';
+import '../widgets/task_detail_dialog.dart';
 import '../widgets/task_edit_dialog.dart';
 import '../widgets/task_share_dialog.dart';
 import 'note_edit_screen.dart';
@@ -39,13 +40,40 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   Future<void> _toggleTask(TaskItem task) async {
+    final willBeCompleted = !task.isCompleted;
     await TaskService.instance.toggleTaskCompleted(task.id);
     await _loadData();
+
+    if (willBeCompleted && mounted) {
+      final updatedTask = task.copyWith(isCompleted: true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Aufgabe "${task.title}" als erledigt markiert!'),
+          action: SnackBarAction(
+            label: 'Mitteilung an Absender',
+            onPressed: () {
+              TaskService.instance.shareCompletedNoticeViaWhatsApp(updatedTask);
+            },
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   Future<void> _deleteTask(TaskItem task) async {
     await TaskService.instance.deleteTask(task.id);
     await _loadData();
+  }
+
+  void _openTaskDetail(TaskItem task) {
+    showDialog(
+      context: context,
+      builder: (ctx) => TaskDetailDialog(
+        task: task,
+        onUpdated: () => _loadData(),
+      ),
+    );
   }
 
   void _openTaskEditor([TaskItem? task]) {
@@ -202,6 +230,45 @@ class _TasksScreenState extends State<TasksScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                // Overdue warning banner
+                Builder(
+                  builder: (context) {
+                    final overdueTasks = _tasks.where((t) => t.isOverdue).toList();
+                    if (overdueTasks.isEmpty) return const SizedBox.shrink();
+
+                    return Container(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '⚠️ ${overdueTasks.length} überfällige Aufgabe${overdueTasks.length > 1 ? "n" : ""}!',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 13),
+                                ),
+                                const Text(
+                                  'Die Frist ist abgelaufen. Klicke auf eine Aufgabe, um eine Mahnung/Erinnerung zu senden.',
+                                  style: TextStyle(fontSize: 11, color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+
                 // Filter chips row
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -281,7 +348,7 @@ class _TasksScreenState extends State<TasksScreen> {
                               ),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16),
-                                onTap: () => _openTaskEditor(task),
+                                onTap: () => _openTaskDetail(task),
                                 child: Padding(
                                   padding: const EdgeInsets.all(12.0),
                                   child: Row(
@@ -482,16 +549,81 @@ class _TasksScreenState extends State<TasksScreen> {
                                                       ),
                                                     ),
                                                   ),
+
+                                                // Comments count badge
+                                                if (task.comments.isNotEmpty)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                        horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.blue.withAlpha(25),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(Icons.chat_bubble_outline_rounded,
+                                                            size: 11, color: Color(0xFF1565C0)),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          '${task.comments.length} Kommentar(e)',
+                                                          style: const TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: Color(0xFF1565C0),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+
+                                                // Completed by badge
+                                                if (task.isCompleted && task.completedBy != null)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                        horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.green.withAlpha(25),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(Icons.done_all_rounded,
+                                                            size: 11, color: Colors.green),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          'Erledigt von: ${task.completedBy}',
+                                                          style: const TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: Colors.green,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
                                               ],
                                             ),
                                           ],
                                         ),
                                       ),
 
-                                      // Actions: Share & Delete
+                                      // Actions: Overdue, Edit, Share, Delete
+                                      if (isOverdue)
+                                        IconButton(
+                                          icon: const Icon(Icons.alarm_on_rounded, size: 18, color: Colors.red),
+                                          tooltip: 'Frist-Mahnung versenden',
+                                          onPressed: () => _openShareTaskDialog(task),
+                                        ),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, size: 18),
+                                        tooltip: 'Bearbeiten',
+                                        onPressed: () => _openTaskEditor(task),
+                                      ),
                                       IconButton(
                                         icon: const Icon(Icons.share_rounded, size: 18),
-                                        tooltip: 'Aufgabe an Nutzer oder Gruppe versenden',
+                                        tooltip: 'Aufgabe teilen / versenden',
                                         onPressed: () => _openShareTaskDialog(task),
                                       ),
                                       IconButton(

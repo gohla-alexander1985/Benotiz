@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/task_service.dart';
+import '../widgets/task_import_dialog.dart';
 import 'home_screen.dart';
 import 'tasks_screen.dart';
 import 'ai_settings_screen.dart';
@@ -16,14 +18,41 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    _handleDeepLink();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handleDeepLink();
+    });
   }
 
   void _handleDeepLink() {
     try {
       final uri = Uri.base;
+
+      if (uri.queryParameters.containsKey('import_task')) {
+        final payload = uri.queryParameters['import_task'];
+        if (payload != null && payload.isNotEmpty) {
+          final task = TaskService.instance.decodeTaskFromPayload(payload);
+          if (task != null && mounted) {
+            setState(() {
+              _currentIndex = 1; // Switch to Aufgaben
+            });
+            showDialog(
+              context: context,
+              builder: (_) => TaskImportDialog(
+                importedTask: task,
+                onImported: () {
+                  setState(() {});
+                },
+              ),
+            );
+            return;
+          }
+        }
+      }
+
       if (uri.queryParameters.containsKey('task') || uri.queryParameters.containsKey('tasks')) {
-        _currentIndex = 1;
+        setState(() {
+          _currentIndex = 1;
+        });
       }
     } catch (_) {}
   }
