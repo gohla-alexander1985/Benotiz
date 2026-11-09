@@ -65,10 +65,67 @@ class TaskService {
     await saveTasks(tasks);
   }
 
+  TaskItem? _lastDeletedTask;
+  int? _lastDeletedIndex;
+  List<TaskItem> _lastDeletedBatch = [];
+  TaskItem? _lastStatusChangedTask;
+  bool? _lastStatusPreviousState;
+
+  bool get canUndo => _lastDeletedTask != null || _lastStatusChangedTask != null || _lastDeletedBatch.isNotEmpty;
+  bool get canUndoDelete => _lastDeletedTask != null;
+  TaskItem? get lastDeletedTask => _lastDeletedTask;
+
   Future<void> deleteTask(String taskId) async {
+    await deleteTaskWithUndo(taskId);
+  }
+
+  Future<TaskItem?> deleteTaskWithUndo(String taskId) async {
     final tasks = await loadTasks();
-    tasks.removeWhere((t) => t.id == taskId);
+    final index = tasks.indexWhere((t) => t.id == taskId);
+    if (index >= 0) {
+      _lastDeletedTask = tasks[index];
+      _lastDeletedIndex = index;
+      tasks.removeAt(index);
+      await saveTasks(tasks);
+      return _lastDeletedTask;
+    }
+    return null;
+  }
+
+  Future<TaskItem?> undoLastDelete() async {
+    if (_lastDeletedTask == null) return null;
+    final taskToRestore = _lastDeletedTask!;
+    final insertIndex = _lastDeletedIndex ?? 0;
+    final tasks = await loadTasks();
+    if (insertIndex <= tasks.length) {
+      tasks.insert(insertIndex, taskToRestore);
+    } else {
+      tasks.add(taskToRestore);
+    }
+    _lastDeletedTask = null;
+    _lastDeletedIndex = null;
     await saveTasks(tasks);
+    return taskToRestore;
+  }
+
+  Future<int> clearCompletedTasks() async {
+    final tasks = await loadTasks();
+    final completed = tasks.where((t) => t.isCompleted).toList();
+    if (completed.isEmpty) return 0;
+    _lastDeletedBatch = completed;
+    tasks.removeWhere((t) => t.isCompleted);
+    await saveTasks(tasks);
+    return completed.length;
+  }
+
+  Future<int> undoClearCompletedTasks() async {
+    if (_lastDeletedBatch.isEmpty) return 0;
+    final count = _lastDeletedBatch.length;
+    final tasks = await loadTasks();
+    tasks.addAll(_lastDeletedBatch);
+    _lastDeletedBatch = [];
+    await saveTasks(tasks);
+    return count;
   }
 
   Future<void> toggleTaskCompleted(String taskId, {String? byUser}) async {
@@ -76,6 +133,8 @@ class TaskService {
     final index = tasks.indexWhere((t) => t.id == taskId);
     if (index >= 0) {
       final task = tasks[index];
+      _lastStatusChangedTask = task;
+      _lastStatusPreviousState = task.isCompleted;
       final newStatus = !task.isCompleted;
       final userName = byUser ?? await getUserName();
 
@@ -87,6 +146,23 @@ class TaskService {
       );
       await saveTasks(tasks);
     }
+  }
+
+  Future<TaskItem?> undoLastStatusChange() async {
+    if (_lastStatusChangedTask == null || _lastStatusPreviousState == null) return null;
+    final taskId = _lastStatusChangedTask!.id;
+    final task = _lastStatusChangedTask!;
+    _lastStatusChangedTask = null;
+    _lastStatusPreviousState = null;
+
+    final tasks = await loadTasks();
+    final index = tasks.indexWhere((t) => t.id == taskId);
+    if (index >= 0) {
+      tasks[index] = task;
+      await saveTasks(tasks);
+      return task;
+    }
+    return null;
   }
 
   Future<void> setTaskCompleted(String taskId, bool isCompleted, {String? completedBy}) async {

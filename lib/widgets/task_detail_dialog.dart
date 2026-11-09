@@ -105,6 +105,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final dateFormat = DateFormat('dd.MM.yyyy', 'de_DE');
     final timeFormat = DateFormat('dd.MM.yyyy HH:mm', 'de_DE');
 
@@ -126,10 +127,14 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _task.isCompleted ? Colors.green.shade50 : const Color(0xFFE3F2FD),
+                      color: _task.isCompleted
+                          ? (isDark ? Colors.green.withAlpha(40) : Colors.green.shade50)
+                          : (isDark ? const Color(0xFF162A48) : const Color(0xFFE3F2FD)),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: _task.isCompleted ? Colors.green.shade300 : const Color(0xFFBBDEFB),
+                        color: _task.isCompleted
+                            ? (isDark ? Colors.green.shade600 : Colors.green.shade300)
+                            : (isDark ? const Color(0xFF284878) : const Color(0xFFBBDEFB)),
                       ),
                     ),
                     child: Row(
@@ -138,7 +143,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                         Icon(
                           _task.isCompleted ? Icons.check_circle : Icons.pending_actions_rounded,
                           size: 16,
-                          color: _task.isCompleted ? Colors.green.shade700 : const Color(0xFF1565C0),
+                          color: _task.isCompleted ? Colors.green : (isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0)),
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -146,7 +151,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: _task.isCompleted ? Colors.green.shade700 : const Color(0xFF1565C0),
+                            color: _task.isCompleted ? Colors.green : (isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0)),
                           ),
                         ),
                       ],
@@ -208,9 +213,9 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                           margin: const EdgeInsets.symmetric(vertical: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.red.shade50,
+                            color: isDark ? Colors.red.withAlpha(40) : Colors.red.shade50,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.red.shade200),
+                            border: Border.all(color: isDark ? Colors.red.shade800 : Colors.red.shade200),
                           ),
                           child: Row(
                             children: [
@@ -244,7 +249,11 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                       if (_task.description.isNotEmpty) ...[
                         Text(
                           _task.description,
-                          style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+                          style: TextStyle(
+                            fontSize: 14,
+                            height: 1.4,
+                            color: isDark ? const Color(0xFFE2EDF8) : Colors.black87,
+                          ),
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -286,7 +295,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                             _buildBadge(
                               icon: Icons.note_alt_rounded,
                               label: 'Notiz: ${_task.linkedNoteTitle}',
-                              color: Colors.blue.shade900,
+                              color: isDark ? const Color(0xFF90CAF9) : Colors.blue.shade900,
                             ),
                         ],
                       ),
@@ -296,10 +305,14 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: _task.isCompleted ? Colors.green.shade50 : const Color(0xFFF1F5F9),
+                          color: _task.isCompleted
+                              ? (isDark ? Colors.green.withAlpha(30) : Colors.green.shade50)
+                              : (isDark ? const Color(0xFF182647) : const Color(0xFFF1F5F9)),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: _task.isCompleted ? Colors.green.shade200 : const Color(0xFFE2E8F0),
+                            color: _task.isCompleted
+                                ? (isDark ? Colors.green.shade700 : Colors.green.shade200)
+                                : (isDark ? const Color(0xFF283B63) : const Color(0xFFE2E8F0)),
                           ),
                         ),
                         child: Row(
@@ -320,7 +333,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                                   if (_task.isCompleted && _task.completedBy != null)
                                     Text(
                                       'Erledigt von: ${_task.completedBy} am ${timeFormat.format(_task.completedAt ?? DateTime.now())}',
-                                      style: TextStyle(fontSize: 11, color: Colors.green.shade800),
+                                      style: TextStyle(fontSize: 11, color: isDark ? Colors.green.shade300 : Colors.green.shade800),
                                     ),
                                 ],
                               ),
@@ -341,7 +354,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                       // Comments Section
                       Row(
                         children: [
-                          const Icon(Icons.chat_bubble_outline_rounded, size: 18, color: Color(0xFF1565C0)),
+                          Icon(Icons.chat_bubble_outline_rounded, size: 18, color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0)),
                           const SizedBox(width: 8),
                           Text(
                             'Kommentare & Verlauf (${_task.comments.length})',
@@ -353,14 +366,16 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
 
                       if (_task.comments.isEmpty)
                         Container(
+                          width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
+                            color: isDark ? const Color(0xFF182647) : Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: isDark ? const Color(0xFF283B63) : Colors.grey.shade200),
                           ),
-                          child: const Text(
+                          child: Text(
                             'Noch keine Kommentare vorhanden. Schreibe unten eine Rückmeldung für den Absender.',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey),
                           ),
                         )
                       else
@@ -374,9 +389,9 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                             return Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
+                                color: isDark ? const Color(0xFF1A2A4C) : const Color(0xFFF8FAFC),
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                border: Border.all(color: isDark ? const Color(0xFF283B63) : const Color(0xFFE2E8F0)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,7 +401,11 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                                     children: [
                                       Text(
                                         c.author,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF1565C0)),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0),
+                                        ),
                                       ),
                                       Text(
                                         timeFormat.format(c.createdAt),
@@ -395,7 +414,14 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(c.text, style: const TextStyle(fontSize: 13, height: 1.3)),
+                                  Text(
+                                    c.text,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      height: 1.3,
+                                      color: isDark ? const Color(0xFFE2EDF8) : Colors.black87,
+                                    ),
+                                  ),
                                 ],
                               ),
                             );
@@ -407,8 +433,9 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
+                          color: isDark ? const Color(0xFF182647) : const Color(0xFFF1F5F9),
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isDark ? const Color(0xFF283B63) : const Color(0xFFE2E8F0)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -418,14 +445,13 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                             Row(
                               children: [
                                 SizedBox(
-                                  width: 140,
+                                  width: 130,
                                   child: TextField(
                                     controller: _authorCtrl,
                                     style: const TextStyle(fontSize: 12),
                                     decoration: InputDecoration(
                                       labelText: 'Dein Name',
                                       isDense: true,
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                     ),
                                   ),
@@ -436,9 +462,8 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                                     controller: _commentCtrl,
                                     style: const TextStyle(fontSize: 12),
                                     decoration: InputDecoration(
-                                      hintText: 'Nachricht oder Rückmeldung...',
+                                      hintText: 'Rückmeldung schreiben...',
                                       isDense: true,
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                     ),
                                     onSubmitted: (_) => _addComment(),
@@ -447,7 +472,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                                 const SizedBox(width: 6),
                                 IconButton.filled(
                                   style: IconButton.styleFrom(
-                                    backgroundColor: const Color(0xFF1565C0),
+                                    backgroundColor: theme.colorScheme.primary,
                                     padding: const EdgeInsets.all(8),
                                   ),
                                   icon: _isAddingComment
@@ -465,34 +490,80 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                 ),
               ),
 
-              const SizedBox(height: 12),
-              // Footer Actions
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    ),
-                    icon: const Icon(Icons.reply_rounded, size: 18),
-                    label: const Text('Rückmeldung an Absender'),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => TaskShareDialog(task: _task),
-                      );
-                    },
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1565C0),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Schließen'),
-                  ),
-                ],
+              const SizedBox(height: 14),
+              // Footer Actions: Responsive and adapting to full device / screen width
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 440;
+                  if (isNarrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.reply_rounded, size: 18),
+                          label: const Text('Rückmeldung an Absender'),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => TaskShareDialog(task: _task),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(46),
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Schließen', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    );
+                  } else {
+                    return Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(46),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.reply_rounded, size: 18),
+                            label: const Text('Rückmeldung an Absender', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) => TaskShareDialog(task: _task),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(46),
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Schließen', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                },
               ),
             ],
           ),

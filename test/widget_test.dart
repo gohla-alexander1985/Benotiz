@@ -231,5 +231,37 @@ Bitte Herrn Schmidt anrufen und das Protokoll versenden.
       expect(decoded.description, 'Bitte bis 14 Uhr erledigen');
       expect(decoded.creatorName, 'Alexander');
     });
+
+    test('TaskService deleteTaskWithUndo and undoLastDelete', () async {
+      final task = TaskItem.create(title: 'Sicherheitsprüfung');
+      await TaskService.instance.saveOrUpdateTask(task);
+
+      final deleted = await TaskService.instance.deleteTaskWithUndo(task.id);
+      expect(deleted?.title, 'Sicherheitsprüfung');
+
+      final tasksAfterDelete = await TaskService.instance.loadTasks();
+      expect(tasksAfterDelete.any((t) => t.id == task.id), isFalse);
+
+      final restored = await TaskService.instance.undoLastDelete();
+      expect(restored?.title, 'Sicherheitsprüfung');
+
+      final tasksAfterUndo = await TaskService.instance.loadTasks();
+      expect(tasksAfterUndo.any((t) => t.id == task.id), isTrue);
+    });
+
+    test('TaskService toggleTaskCompleted and undoLastStatusChange', () async {
+      final task = TaskItem.create(title: 'Wartung durchführen');
+      await TaskService.instance.saveOrUpdateTask(task);
+
+      await TaskService.instance.toggleTaskCompleted(task.id, byUser: 'Tester');
+      var loaded = (await TaskService.instance.loadTasks()).firstWhere((t) => t.id == task.id);
+      expect(loaded.isCompleted, isTrue);
+      expect(loaded.completedBy, 'Tester');
+
+      await TaskService.instance.undoLastStatusChange();
+      loaded = (await TaskService.instance.loadTasks()).firstWhere((t) => t.id == task.id);
+      expect(loaded.isCompleted, isFalse);
+      expect(loaded.completedBy, isNull);
+    });
   });
 }

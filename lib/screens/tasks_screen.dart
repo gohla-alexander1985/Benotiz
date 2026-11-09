@@ -21,11 +21,19 @@ class _TasksScreenState extends State<TasksScreen> {
   bool _isLoading = true;
   String _selectedFilter = 'open'; // 'open', 'all', 'completed', or group name
   List<String> _groups = [];
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -44,26 +52,94 @@ class _TasksScreenState extends State<TasksScreen> {
     await TaskService.instance.toggleTaskCompleted(task.id);
     await _loadData();
 
-    if (willBeCompleted && mounted) {
-      final updatedTask = task.copyWith(isCompleted: true);
+    if (mounted) {
+      if (willBeCompleted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Aufgabe "${task.title}" erledigt!'),
+            action: SnackBarAction(
+              label: 'RÜCKGÄNGIG',
+              textColor: Colors.amberAccent,
+              onPressed: () async {
+                await TaskService.instance.undoLastStatusChange();
+                await _loadData();
+              },
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('↩️ Aufgabe "${task.title}" wieder als offen markiert!'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteTask(TaskItem task) async {
+    await TaskService.instance.deleteTaskWithUndo(task.id);
+    await _loadData();
+
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Aufgabe "${task.title}" als erledigt markiert!'),
+          content: Text('🗑️ Aufgabe "${task.title}" gelöscht'),
           action: SnackBarAction(
-            label: 'Mitteilung an Absender',
-            onPressed: () {
-              TaskService.instance.shareCompletedNoticeViaWhatsApp(updatedTask);
+            label: 'RÜCKGÄNGIG',
+            textColor: Colors.amberAccent,
+            onPressed: () async {
+              await TaskService.instance.undoLastDelete();
+              await _loadData();
             },
           ),
-          duration: const Duration(seconds: 5),
+          duration: const Duration(seconds: 6),
         ),
       );
     }
   }
 
-  Future<void> _deleteTask(TaskItem task) async {
-    await TaskService.instance.deleteTask(task.id);
+  Future<void> _undoLastAction() async {
+    if (TaskService.instance.canUndoDelete) {
+      final restored = await TaskService.instance.undoLastDelete();
+      await _loadData();
+      if (mounted && restored != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('↩️ Aufgabe "${restored.title}" wiederhergestellt!')),
+        );
+      }
+    } else {
+      final restored = await TaskService.instance.undoLastStatusChange();
+      await _loadData();
+      if (mounted && restored != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('↩️ Status von "${restored.title}" zurückgesetzt!')),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearCompletedTasks() async {
+    final count = await TaskService.instance.clearCompletedTasks();
     await _loadData();
+    if (mounted && count > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$count erledigte Aufgabe(n) gelöscht'),
+          action: SnackBarAction(
+            label: 'RÜCKGÄNGIG',
+            textColor: Colors.amberAccent,
+            onPressed: () async {
+              await TaskService.instance.undoClearCompletedTasks();
+              await _loadData();
+            },
+          ),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
   }
 
   void _openTaskDetail(TaskItem task) {
@@ -112,70 +188,154 @@ class _TasksScreenState extends State<TasksScreen> {
     final textCtrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.auto_awesome_rounded, color: Color(0xFF1565C0)),
-            SizedBox(width: 10),
-            Text('KI: Aufgaben extrahieren'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Füge eine E-Mail, Chatnachricht oder Notiz ein. Der KI-Agent erkennt automatisch die Aufgaben und Fristen:',
-              style: TextStyle(fontSize: 14),
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final isDark = theme.brightness == Brightness.dark;
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              const Text('KI: Aufgaben extrahieren'),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Füge eine E-Mail, Chatnachricht oder Notiz ein. Der KI-Agent erkennt automatisch die Aufgaben und Fristen:',
+                  style: TextStyle(fontSize: 13, color: isDark ? Colors.grey.shade300 : Colors.black87),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: textCtrl,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    hintText: 'z.B.: "Bitte bis Freitag die Quartalszahlen prüfen und Max anrufen..."',
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: textCtrl,
-              maxLines: 5,
-              decoration: InputDecoration(
-                hintText: 'z.B.: "Bitte bis Freitag die Quartalszahlen prüfen und Max anrufen..."',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 360;
+                  if (isNarrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size.fromHeight(44),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.auto_awesome, size: 16),
+                          label: const Text('Aufgaben generieren', style: TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: () => _runAIExtract(ctx, textCtrl.text.trim()),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          style: TextButton.styleFrom(minimumSize: const Size.fromHeight(40)),
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Abbrechen'),
+                        ),
+                      ],
+                    );
+                  } else {
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            style: TextButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Abbrechen'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size.fromHeight(44),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.auto_awesome, size: 16),
+                            label: const Text('Aufgaben generieren', style: TextStyle(fontWeight: FontWeight.bold)),
+                            onPressed: () => _runAIExtract(ctx, textCtrl.text.trim()),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                },
               ),
             ),
           ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.auto_awesome),
-            label: const Text('Aufgaben generieren'),
+        );
+      },
+    );
+  }
+
+  Future<void> _runAIExtract(BuildContext ctx, String text) async {
+    if (text.isEmpty) return;
+    Navigator.pop(ctx);
+
+    setState(() => _isLoading = true);
+    final extracted = await AIService.instance.extractTasksFromText('Text-Eingabe', text);
+    await TaskService.instance.addTasks(extracted);
+    await _loadData();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✨ ${extracted.length} Aufgabe(n) von der KI erkannt und hinzugefügt!'),
+          action: SnackBarAction(
+            label: 'RÜCKGÄNGIG',
+            textColor: Colors.amberAccent,
             onPressed: () async {
-              final text = textCtrl.text.trim();
-              if (text.isEmpty) return;
-              Navigator.pop(ctx);
-
-              setState(() => _isLoading = true);
-              final extracted = await AIService.instance.extractTasksFromText('Text-Eingabe', text);
-              await TaskService.instance.addTasks(extracted);
-              await _loadData();
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('✨ ${extracted.length} Aufgabe(n) von der KI erkannt und hinzugefügt!'),
-                  ),
-                );
+              for (final t in extracted) {
+                await TaskService.instance.deleteTask(t.id);
               }
+              await _loadData();
             },
           ),
-        ],
-      ),
-    );
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   List<TaskItem> get _filteredTasks {
     return _tasks.where((task) {
-      if (_selectedFilter == 'open') return !task.isCompleted;
-      if (_selectedFilter == 'completed') return task.isCompleted;
-      if (_selectedFilter == 'all') return true;
-      // Filter by group
-      return task.assignedGroup == _selectedFilter;
+      if (_selectedFilter == 'open' && task.isCompleted) return false;
+      if (_selectedFilter == 'completed' && !task.isCompleted) return false;
+      if (_selectedFilter != 'open' && _selectedFilter != 'all' && _selectedFilter != 'completed') {
+        if (task.assignedGroup != _selectedFilter) return false;
+      }
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final matchesTitle = task.title.toLowerCase().contains(query);
+        final matchesDesc = task.description.toLowerCase().contains(query);
+        final matchesAssigned = task.assignedTo?.toLowerCase().contains(query) ?? false;
+        final matchesGroup = task.assignedGroup?.toLowerCase().contains(query) ?? false;
+        final matchesNote = task.linkedNoteTitle?.toLowerCase().contains(query) ?? false;
+        if (!matchesTitle && !matchesDesc && !matchesAssigned && !matchesGroup && !matchesNote) {
+          return false;
+        }
+      }
+      return true;
     }).toList();
   }
 
@@ -194,8 +354,11 @@ class _TasksScreenState extends State<TasksScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final filtered = _filteredTasks;
     final dateFormat = DateFormat('dd. MMM, HH:mm', 'de_DE');
+    final openCount = _tasks.where((t) => !t.isCompleted).length;
+    final completedCount = _tasks.where((t) => t.isCompleted).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -217,6 +380,20 @@ class _TasksScreenState extends State<TasksScreen> {
           ],
         ),
         actions: [
+          // Undo button if there is any action to undo
+          if (TaskService.instance.canUndo)
+            IconButton(
+              icon: const Icon(Icons.undo_rounded),
+              tooltip: 'Letzte Aktion rückgängig machen (Undo)',
+              onPressed: _undoLastAction,
+            ),
+          // Clear completed tasks button
+          if (_selectedFilter == 'completed' && completedCount > 0)
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_outlined),
+              tooltip: 'Alle erledigten Aufgaben löschen (Delete)',
+              onPressed: _clearCompletedTasks,
+            ),
           // AI Extraction button
           IconButton(
             icon: const Icon(Icons.auto_awesome_rounded),
@@ -240,9 +417,9 @@ class _TasksScreenState extends State<TasksScreen> {
                       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade50,
+                        color: isDark ? Colors.red.withAlpha(40) : Colors.red.shade50,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.red.shade200),
+                        border: Border.all(color: isDark ? Colors.red.shade800 : Colors.red.shade200),
                       ),
                       child: Row(
                         children: [
@@ -254,11 +431,15 @@ class _TasksScreenState extends State<TasksScreen> {
                               children: [
                                 Text(
                                   '⚠️ ${overdueTasks.length} überfällige Aufgabe${overdueTasks.length > 1 ? "n" : ""}!',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 13),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.red.shade200 : Colors.red,
+                                    fontSize: 13,
+                                  ),
                                 ),
-                                const Text(
+                                Text(
                                   'Die Frist ist abgelaufen. Klicke auf eine Aufgabe, um eine Mahnung/Erinnerung zu senden.',
-                                  style: TextStyle(fontSize: 11, color: Colors.red),
+                                  style: TextStyle(fontSize: 11, color: isDark ? Colors.red.shade300 : Colors.red),
                                 ),
                               ],
                             ),
@@ -269,26 +450,96 @@ class _TasksScreenState extends State<TasksScreen> {
                   },
                 ),
 
-                // Filter chips row
+                // CRUD Action Bar (Create, AI, Undo) - Responsive full-width
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(42),
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.add_task_rounded, size: 18),
+                          label: const Text('Neue Aufgabe', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          onPressed: () => _openTaskEditor(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(42),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                          label: const Text('KI-Erkennung', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12)),
+                          onPressed: _showAIExtractPrompt,
+                        ),
+                      ),
+                      if (TaskService.instance.canUndo) ...[
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Rückgängig machen (Undo)',
+                          child: IconButton.filledTonal(
+                            icon: const Icon(Icons.undo_rounded, size: 20),
+                            onPressed: _undoLastAction,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                // Search Bar (Read / Filter)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                    decoration: InputDecoration(
+                      hintText: 'Aufgaben durchsuchen...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+
+                // Filter chips row (Read)
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: Row(
                     children: [
                       FilterChip(
-                        label: const Text('Offen'),
+                        label: Text('Offen ($openCount)'),
                         selected: _selectedFilter == 'open',
                         onSelected: (_) => setState(() => _selectedFilter = 'open'),
                       ),
                       const SizedBox(width: 8),
                       FilterChip(
-                        label: const Text('Alle'),
+                        label: Text('Alle (${_tasks.length})'),
                         selected: _selectedFilter == 'all',
                         onSelected: (_) => setState(() => _selectedFilter = 'all'),
                       ),
                       const SizedBox(width: 8),
                       FilterChip(
-                        label: const Text('Erledigt'),
+                        label: Text('Erledigt ($completedCount)'),
                         selected: _selectedFilter == 'completed',
                         onSelected: (_) => setState(() => _selectedFilter = 'completed'),
                       ),
@@ -305,14 +556,14 @@ class _TasksScreenState extends State<TasksScreen> {
                   ),
                 ),
 
-                // Task list
+                // Task list (Read & CRUD actions on each item)
                 Expanded(
                   child: filtered.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.task_alt_rounded, size: 64, color: Colors.grey.shade400),
+                              Icon(Icons.task_alt_rounded, size: 64, color: isDark ? Colors.grey.shade700 : Colors.grey.shade400),
                               const SizedBox(height: 12),
                               Text(
                                 _selectedFilter == 'open'
@@ -321,13 +572,13 @@ class _TasksScreenState extends State<TasksScreen> {
                                 style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade600),
+                                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                               ),
                             ],
                           ),
                         )
                       : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 85),
                           itemCount: filtered.length,
                           separatorBuilder: (context, index) => const SizedBox(height: 8),
                           itemBuilder: (ctx, idx) {
@@ -337,12 +588,13 @@ class _TasksScreenState extends State<TasksScreen> {
 
                             return Card(
                               elevation: 1,
+                              color: isDark ? const Color(0xFF131D38) : Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                                 side: BorderSide(
                                   color: isOverdue
-                                      ? Colors.red.withAlpha(100)
-                                      : Colors.black.withAlpha(15),
+                                      ? Colors.red.withAlpha(isDark ? 180 : 100)
+                                      : (isDark ? const Color(0xFF283B63) : Colors.black.withAlpha(15)),
                                   width: isOverdue ? 1.5 : 1,
                                 ),
                               ),
@@ -354,16 +606,17 @@ class _TasksScreenState extends State<TasksScreen> {
                                   child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      // Checkbox
+                                      // Checkbox (Toggle completed)
                                       Checkbox(
                                         value: task.isCompleted,
+                                        activeColor: Colors.green,
                                         shape: RoundedRectangleBorder(
                                             borderRadius: BorderRadius.circular(6)),
                                         onChanged: (_) => _toggleTask(task),
                                       ),
                                       const SizedBox(width: 4),
 
-                                      // Content
+                                      // Content (Read)
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,7 +640,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                                 task.description,
                                                 style: TextStyle(
                                                   fontSize: 13,
-                                                  color: Colors.grey.shade600,
+                                                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                                                 ),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
@@ -425,8 +678,8 @@ class _TasksScreenState extends State<TasksScreen> {
                                                         horizontal: 6, vertical: 2),
                                                     decoration: BoxDecoration(
                                                       color: isOverdue
-                                                          ? Colors.red.withAlpha(30)
-                                                          : Colors.blue.withAlpha(25),
+                                                          ? Colors.red.withAlpha(isDark ? 50 : 30)
+                                                          : Colors.blue.withAlpha(isDark ? 50 : 25),
                                                       borderRadius: BorderRadius.circular(6),
                                                     ),
                                                     child: Row(
@@ -437,7 +690,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                                           size: 11,
                                                           color: isOverdue
                                                               ? Colors.red
-                                                              : Colors.blue.shade800,
+                                                              : (isDark ? const Color(0xFF90CAF9) : Colors.blue.shade800),
                                                         ),
                                                         const SizedBox(width: 4),
                                                         Text(
@@ -447,7 +700,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                                             fontWeight: FontWeight.w600,
                                                             color: isOverdue
                                                                 ? Colors.red
-                                                                : Colors.blue.shade800,
+                                                                : (isDark ? const Color(0xFF90CAF9) : Colors.blue.shade800),
                                                           ),
                                                         ),
                                                       ],
@@ -456,8 +709,11 @@ class _TasksScreenState extends State<TasksScreen> {
 
                                                 // Reminder badge
                                                 if (task.reminderDateTime != null)
-                                                  Icon(Icons.notifications_active_outlined,
-                                                      size: 14, color: Colors.blue.shade700),
+                                                  Icon(
+                                                    Icons.notifications_active_outlined,
+                                                    size: 14,
+                                                    color: isDark ? const Color(0xFF90CAF9) : Colors.blue.shade700,
+                                                  ),
 
                                                 // Group badge
                                                 if (task.assignedGroup != null &&
@@ -521,29 +777,29 @@ class _TasksScreenState extends State<TasksScreen> {
                                                       padding: const EdgeInsets.symmetric(
                                                           horizontal: 6, vertical: 2),
                                                       decoration: BoxDecoration(
-                                                        color: const Color(0xFFE3F2FD),
+                                                        color: isDark ? const Color(0xFF162A48) : const Color(0xFFE3F2FD),
                                                         borderRadius: BorderRadius.circular(6),
                                                         border: Border.all(
-                                                            color: const Color(0xFFBBDEFB)),
+                                                            color: isDark ? const Color(0xFF284878) : const Color(0xFFBBDEFB)),
                                                       ),
                                                       child: Row(
                                                         mainAxisSize: MainAxisSize.min,
                                                         children: [
-                                                          const Icon(Icons.note_alt_rounded,
-                                                              size: 11, color: Color(0xFF1565C0)),
+                                                          Icon(Icons.note_alt_rounded,
+                                                              size: 11, color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0)),
                                                           const SizedBox(width: 4),
                                                           Text(
                                                             'Notiz: ${task.linkedNoteTitle}',
-                                                            style: const TextStyle(
+                                                            style: TextStyle(
                                                               fontSize: 11,
                                                               fontWeight: FontWeight.w600,
-                                                              color: Color(0xFF1565C0),
+                                                              color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0),
                                                             ),
                                                           ),
                                                           if (task.linkedNoteId != null) ...[
                                                             const SizedBox(width: 2),
-                                                            const Icon(Icons.arrow_forward_rounded,
-                                                                size: 10, color: Color(0xFF1565C0)),
+                                                            Icon(Icons.arrow_forward_rounded,
+                                                                size: 10, color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0)),
                                                           ],
                                                         ],
                                                       ),
@@ -562,15 +818,15 @@ class _TasksScreenState extends State<TasksScreen> {
                                                     child: Row(
                                                       mainAxisSize: MainAxisSize.min,
                                                       children: [
-                                                        const Icon(Icons.chat_bubble_outline_rounded,
-                                                            size: 11, color: Color(0xFF1565C0)),
+                                                        Icon(Icons.chat_bubble_outline_rounded,
+                                                            size: 11, color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0)),
                                                         const SizedBox(width: 4),
                                                         Text(
                                                           '${task.comments.length} Kommentar(e)',
-                                                          style: const TextStyle(
+                                                          style: TextStyle(
                                                             fontSize: 11,
                                                             fontWeight: FontWeight.bold,
-                                                            color: Color(0xFF1565C0),
+                                                            color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0),
                                                           ),
                                                         ),
                                                       ],
@@ -609,12 +865,19 @@ class _TasksScreenState extends State<TasksScreen> {
                                         ),
                                       ),
 
-                                      // Actions: Overdue, Edit, Share, Delete
+                                      // Actions: Overdue, Undo, Edit, Share, Delete
                                       if (isOverdue)
                                         IconButton(
                                           icon: const Icon(Icons.alarm_on_rounded, size: 18, color: Colors.red),
                                           tooltip: 'Frist-Mahnung versenden',
                                           onPressed: () => _openShareTaskDialog(task),
+                                        ),
+                                      // Undo for completed task
+                                      if (task.isCompleted)
+                                        IconButton(
+                                          icon: const Icon(Icons.undo_rounded, size: 18, color: Colors.blue),
+                                          tooltip: 'Als offen markieren (Rückgängig)',
+                                          onPressed: () => _toggleTask(task),
                                         ),
                                       IconButton(
                                         icon: const Icon(Icons.edit_outlined, size: 18),
@@ -629,7 +892,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline_rounded, size: 18),
                                         color: Colors.red.shade400,
-                                        tooltip: 'Löschen',
+                                        tooltip: 'Löschen (Delete)',
                                         onPressed: () => _deleteTask(task),
                                       ),
                                     ],
@@ -642,12 +905,31 @@ class _TasksScreenState extends State<TasksScreen> {
                 ),
               ],
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_tasks_new_task',
-        onPressed: () => _openTaskEditor(),
-        icon: const Icon(Icons.add_task_rounded),
-        label: const Text('Neue Aufgabe'),
+      floatingActionButton: LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = MediaQuery.of(context).size.width;
+          if (screenWidth < 600) {
+            return Container(
+              width: screenWidth - 32,
+              padding: const EdgeInsets.symmetric(horizontal: 0),
+              child: FloatingActionButton.extended(
+                heroTag: 'fab_tasks_new_task',
+                onPressed: () => _openTaskEditor(),
+                icon: const Icon(Icons.add_task_rounded),
+                label: const Text('Neue Aufgabe erstellen', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            );
+          } else {
+            return FloatingActionButton.extended(
+              heroTag: 'fab_tasks_new_task',
+              onPressed: () => _openTaskEditor(),
+              icon: const Icon(Icons.add_task_rounded),
+              label: const Text('Neue Aufgabe'),
+            );
+          }
+        },
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }

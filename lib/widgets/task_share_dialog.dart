@@ -10,6 +10,7 @@ class TaskShareDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final dueStr = task.dueDate != null
         ? '${task.dueDate!.day}.${task.dueDate!.month}.${task.dueDate!.year}'
         : 'Kein Fälligkeitsdatum';
@@ -19,9 +20,9 @@ class TaskShareDialog extends StatelessWidget {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),
+        constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(22.0),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -33,10 +34,10 @@ class TaskShareDialog extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE3F2FD),
+                        color: isDark ? const Color(0xFF162A48) : const Color(0xFFE3F2FD),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.share_rounded, color: Color(0xFF1565C0), size: 24),
+                      child: Icon(Icons.share_rounded, color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0), size: 24),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -52,7 +53,7 @@ class TaskShareDialog extends StatelessWidget {
                           ),
                           Text(
                             'Der Empfänger kann die Aufgabe öffnen, kommentieren & erledigen',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                           ),
                         ],
                       ),
@@ -72,9 +73,9 @@ class TaskShareDialog extends StatelessWidget {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.red.shade50,
+                      color: isDark ? Colors.red.withAlpha(40) : Colors.red.shade50,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.shade200),
+                      border: Border.all(color: isDark ? Colors.red.shade800 : Colors.red.shade200),
                     ),
                     child: Row(
                       children: [
@@ -83,7 +84,11 @@ class TaskShareDialog extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'Achtung: Frist abgelaufen ($dueStr)! Du kannst eine Mahnung/Erinnerung senden.',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red.shade900),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.red.shade200 : Colors.red.shade900,
+                            ),
                           ),
                         ),
                       ],
@@ -96,9 +101,9 @@ class TaskShareDialog extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
+                    color: isDark ? const Color(0xFF182647) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: isDark ? const Color(0xFF283B63) : const Color(0xFFE2E8F0)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,7 +113,7 @@ class TaskShareDialog extends StatelessWidget {
                           Icon(
                             task.isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
                             size: 18,
-                            color: task.isCompleted ? Colors.green : const Color(0xFF1565C0),
+                            color: task.isCompleted ? Colors.green : (isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0)),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -125,10 +130,10 @@ class TaskShareDialog extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: task.priority == 'high'
-                                  ? Colors.red.shade50
+                                  ? (isDark ? Colors.red.withAlpha(40) : Colors.red.shade50)
                                   : task.priority == 'medium'
-                                      ? Colors.orange.shade50
-                                      : Colors.green.shade50,
+                                      ? (isDark ? Colors.orange.withAlpha(40) : Colors.orange.shade50)
+                                      : (isDark ? Colors.green.withAlpha(40) : Colors.green.shade50),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -137,10 +142,10 @@ class TaskShareDialog extends StatelessWidget {
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 color: task.priority == 'high'
-                                    ? Colors.red.shade700
+                                    ? (isDark ? Colors.red.shade300 : Colors.red.shade700)
                                     : task.priority == 'medium'
-                                        ? Colors.orange.shade800
-                                        : Colors.green.shade800,
+                                        ? (isDark ? Colors.orange.shade300 : Colors.orange.shade800)
+                                        : (isDark ? Colors.green.shade300 : Colors.green.shade800),
                               ),
                             ),
                           ),
@@ -149,20 +154,20 @@ class TaskShareDialog extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         'Fällig: $dueStr ${task.assignedGroup != null ? "• Gruppe: ${task.assignedGroup}" : ""}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                       ),
                       if (task.creatorName != null && task.creatorName!.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
                           'Erstellt von: ${task.creatorName}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                          style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade300 : Colors.grey.shade700),
                         ),
                       ],
                       if (task.comments.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
                           '💬 ${task.comments.length} Kommentar(e) vorhanden',
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF1565C0), fontWeight: FontWeight.w500),
+                          style: TextStyle(fontSize: 11, color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0), fontWeight: FontWeight.w500),
                         ),
                       ],
                     ],
@@ -283,24 +288,45 @@ class TaskShareDialog extends StatelessWidget {
                 const SizedBox(height: 14),
                 // App Link indicator
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: isDark ? const Color(0xFF162340) : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isDark ? const Color(0xFF283B63) : Colors.grey.shade300),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.link_rounded, size: 16, color: Colors.grey),
+                      Icon(Icons.link_rounded, size: 16, color: isDark ? const Color(0xFF90CAF9) : Colors.grey),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           taskUrl,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontFamily: 'monospace'),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                            fontFamily: 'monospace',
+                          ),
                         ),
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Responsive Full-width close button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(46),
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Schließen', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
                 ),
               ],

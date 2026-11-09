@@ -38,8 +38,32 @@ class BEnotizApp extends StatelessWidget {
           foregroundColor: Color(0xFF0D253F),
         ),
         cardTheme: CardThemeData(
+          color: Colors.white,
           elevation: 1,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        dialogTheme: const DialogThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+          labelStyle: const TextStyle(color: primaryBlue),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderSide: BorderSide(color: primaryBlue, width: 1.5),
+          ),
         ),
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
           backgroundColor: primaryBlue,
@@ -72,8 +96,32 @@ class BEnotizApp extends StatelessWidget {
           foregroundColor: Color(0xFFE2EDF8),
         ),
         cardTheme: CardThemeData(
+          color: const Color(0xFF131D38),
           elevation: 1,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        dialogTheme: const DialogThemeData(
+          backgroundColor: Color(0xFF131D38),
+          surfaceTintColor: Colors.transparent,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF182647),
+          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+          labelStyle: const TextStyle(color: Color(0xFF90CAF9)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF283B63)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF283B63)),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderSide: BorderSide(color: Color(0xFF64B5F6), width: 1.5),
+          ),
         ),
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
           backgroundColor: Color(0xFF1E88E5),
