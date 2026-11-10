@@ -48,8 +48,14 @@ void main() {
     await tester.tap(find.text('A4 Blanko'));
     await tester.pumpAndSettle();
 
-    // Should now be inside NoteEditScreen with title and body fields
+    // Should now be inside NoteEditScreen with stylus-mode banner
     expect(find.text('DIN A4 Notizvorlage wählen'), findsNothing);
+    expect(find.text('✍️ Stift-Modus aktiv (Lenovo Pen)'), findsOneWidget);
+    expect(find.text('Tastatur aktivieren'), findsOneWidget);
+
+    // Activating the keyboard allows typing
+    await tester.tap(find.text('Tastatur aktivieren'));
+    await tester.pumpAndSettle();
     expect(find.text('Titel der Notiz...'), findsOneWidget);
   });
 

@@ -4,6 +4,7 @@ import '../models/note.dart';
 import '../models/note_template.dart';
 import '../services/sharing_service.dart';
 import '../services/storage_service.dart';
+import '../widgets/be_notiz_logo.dart';
 import '../widgets/note_card.dart';
 import '../widgets/template_picker_dialog.dart';
 import 'note_edit_screen.dart';
@@ -191,25 +192,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final filtered = _filteredNotes;
     final pinnedNotes = filtered.where((n) => n.isPinned).toList();
     final otherNotes = filtered.where((n) => !n.isPinned).toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(Icons.note_alt_rounded, color: theme.colorScheme.primary, size: 22),
-            ),
-            const SizedBox(width: 12),
-            const Text(
+            BENotizLogo(size: 34),
+            SizedBox(width: 12),
+            Text(
               'BEnotiz',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
             ),

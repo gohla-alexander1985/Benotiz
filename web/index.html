@@ -1,19 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
@@ -25,7 +12,7 @@
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="BEnotiz">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
@@ -34,16 +21,236 @@
 
   <title>BEnotiz</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* PWA Install Modal Styles */
+    .pwa-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(11, 19, 43, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 999999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    .pwa-modal {
+      background: #FFFFFF;
+      max-width: 440px;
+      width: 100%;
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      text-align: center;
+      border: 1px solid rgba(21, 101, 192, 0.2);
+      animation: pwaSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes pwaSlideUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .pwa-modal {
+        background: #111D3B;
+        color: #FFFFFF;
+        border: 1px solid rgba(100, 181, 246, 0.25);
+      }
+      .pwa-subtitle {
+        color: #B0BEC5 !important;
+      }
+      .pwa-btn-secondary {
+        background: #1E2D52 !important;
+        color: #E2EDF8 !important;
+      }
+    }
+    .pwa-icon-wrapper {
+      margin: 0 auto 16px auto;
+      width: 84px;
+      height: 84px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 8px 20px rgba(21, 101, 192, 0.35);
+    }
+    .pwa-icon-wrapper img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .pwa-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin: 0 0 8px 0;
+      letter-spacing: -0.3px;
+    }
+    .pwa-subtitle {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #4A5568;
+      margin: 0 0 20px 0;
+    }
+    .pwa-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .pwa-btn {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
+    }
+    .pwa-btn-primary {
+      background: #1565C0;
+      color: #FFFFFF;
+      box-shadow: 0 4px 14px rgba(21, 101, 192, 0.4);
+    }
+    .pwa-btn-primary:hover {
+      background: #0D47A1;
+      transform: translateY(-1px);
+    }
+    .pwa-btn-secondary {
+      background: #F1F5F9;
+      color: #475569;
+    }
+    .pwa-btn-secondary:hover {
+      background: #E2E8F0;
+    }
+    .pwa-guide {
+      background: #E3F2FD;
+      color: #0D47A1;
+      border-radius: 12px;
+      padding: 12px;
+      margin: 12px 0;
+      font-size: 13px;
+      text-align: left;
+      display: none;
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <!-- PWA Installation Prompt Overlay -->
+  <div id="pwa-install-overlay" class="pwa-overlay">
+    <div class="pwa-modal">
+      <div class="pwa-icon-wrapper">
+        <img src="icons/Icon-192.png" alt="BEnotiz Icon">
+      </div>
+      <h2 class="pwa-title">BEnotiz auf diesem Gerät installieren?</h2>
+      <p class="pwa-subtitle">
+        Möchtest du die BEnotiz-Anwendung installieren und ein App-Icon auf deinem Startbildschirm erstellen?
+        Dadurch öffnet die App schneller im Vollbild und unterstützt die Stifteingabe optimal.
+      </p>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+      <div id="pwa-ios-guide" class="pwa-guide">
+        <strong>💡 Auf iOS / iPadOS installieren:</strong><br>
+        1. Tippe unten (oder oben) auf das <strong>Teilen-Symbol</strong> 📤.<br>
+        2. Wähle im Menü <strong>„Zum Home-Bildschirm“</strong> ➕.
+      </div>
+
+      <div class="pwa-actions">
+        <button id="pwa-install-btn" class="pwa-btn pwa-btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Ja, Anwendung installieren
+        </button>
+        <button id="pwa-dismiss-btn" class="pwa-btn pwa-btn-secondary">
+          Später
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // PWA Install Prompt Handler
+    let deferredPrompt = null;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent browser default mini-infobar
+      e.preventDefault();
+      deferredPrompt = e;
+      window.deferredPrompt = e;
+
+      // Show install prompt dialog if not already running as standalone app
+      if (!isStandalone) {
+        showInstallDialog();
+      }
+    });
+
+    function showInstallDialog() {
+      // If dismissed in this session, don't show repeatedly immediately
+      if (sessionStorage.getItem('pwa_prompt_dismissed') === 'true') {
+        return;
+      }
+      const overlay = document.getElementById('pwa-install-overlay');
+      if (overlay) {
+        overlay.style.display = 'flex';
+      }
+    }
+
+    // Auto-prompt after 1.5 seconds if not installed
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if (!isStandalone) {
+          showInstallDialog();
+        }
+      }, 1500);
+    });
+
+    document.getElementById('pwa-install-btn').addEventListener('click', async () => {
+      if (deferredPrompt) {
+        // Show native install dialog
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          console.log('BEnotiz PWA installed successfully');
+        }
+        deferredPrompt = null;
+        document.getElementById('pwa-install-overlay').style.display = 'none';
+      } else if (isIOS) {
+        // Show iOS instructions
+        document.getElementById('pwa-ios-guide').style.display = 'block';
+      } else {
+        // Fallback for browsers with install button in address bar
+        alert('Tippe in der Adressleiste deines Browsers auf das Installations-Symbol ⊕ oder wähle im Browsermenü "App installieren / Zum Startbildschirm hinzufügen".');
+        document.getElementById('pwa-install-overlay').style.display = 'none';
+      }
+    });
+
+    document.getElementById('pwa-dismiss-btn').addEventListener('click', () => {
+      document.getElementById('pwa-install-overlay').style.display = 'none';
+      sessionStorage.setItem('pwa_prompt_dismissed', 'true');
+    });
+
+    // Global install trigger accessible from Flutter Web
+    window.benotizInstallPrompt = function() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+      } else {
+        showInstallDialog();
+      }
+    };
+  </script>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

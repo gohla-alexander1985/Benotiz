@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/task_item.dart';
 import '../services/task_service.dart';
+import 'handwriting_task_pad.dart';
 import 'task_share_dialog.dart';
 
 class TaskEditDialog extends StatefulWidget {
   final TaskItem? task;
   final String? initialTitle;
+  final String? initialMode; // 'stylus' or 'keyboard'
   final ValueChanged<TaskItem> onSaved;
 
   const TaskEditDialog({
     super.key,
     this.task,
     this.initialTitle,
+    this.initialMode,
     required this.onSaved,
   });
 
@@ -30,11 +33,13 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
   String _priority = 'medium';
   String? _selectedGroup;
   List<String> _availableGroups = [];
+  late String _inputMode; // 'stylus' or 'keyboard'
 
   @override
   void initState() {
     super.initState();
     final t = widget.task;
+    _inputMode = widget.initialMode ?? (t == null ? 'stylus' : 'keyboard');
     _titleController = TextEditingController(text: t?.title ?? widget.initialTitle ?? '');
     _descController = TextEditingController(text: t?.description ?? '');
     _assignedToController = TextEditingController(text: t?.assignedTo ?? '');
@@ -287,13 +292,51 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                           color: theme.colorScheme.primary),
                     ),
                     const SizedBox(width: 14),
-                    Text(
-                      widget.task == null ? 'Neue Aufgabe' : 'Aufgabe bearbeiten',
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.task == null ? 'Neue Aufgabe' : 'Aufgabe bearbeiten',
+                            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            _inputMode == 'stylus'
+                                ? '✍️ Stifteingabe (Handschrift -> Druckschrift)'
+                                : '⌨️ Druckschrift / Tastatur',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? const Color(0xFF90CAF9) : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+
+                // Mode Switcher: Stylus vs Keyboard
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'stylus',
+                        icon: Icon(Icons.draw_rounded, size: 16),
+                        label: Text('✍️ Stift (Handschrift)', style: TextStyle(fontSize: 12)),
+                      ),
+                      ButtonSegment(
+                        value: 'keyboard',
+                        icon: Icon(Icons.keyboard_rounded, size: 16),
+                        label: Text('⌨️ Tastatur / Text', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                    selected: {_inputMode},
+                    onSelectionChanged: (set) => setState(() => _inputMode = set.first),
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 if (widget.task?.linkedNoteTitle != null && widget.task!.linkedNoteTitle!.isNotEmpty) ...[
                   Container(
@@ -323,26 +366,81 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                   const SizedBox(height: 14),
                 ],
 
-                // Title
-                TextField(
-                  controller: _titleController,
-                  autofocus: widget.task == null,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  decoration: const InputDecoration(
-                    labelText: 'Aufgabentitel *',
-                    hintText: 'Was muss getan werden?',
+                // STYLUS HANDWRITING PAD
+                if (_inputMode == 'stylus') ...[
+                  HandwritingTaskPad(
+                    onConverted: (convertedTitle, convertedDesc) {
+                      setState(() {
+                        _titleController.text = convertedTitle;
+                        if (convertedDesc.isNotEmpty) {
+                          _descController.text = convertedDesc;
+                        }
+                        _inputMode = 'keyboard';
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('✨ Handschrift erfolgreich in Druckschrift umgewandelt!'),
+                          backgroundColor: Color(0xFF2E7D32),
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                    },
+                    onCancel: () {
+                      setState(() => _inputMode = 'keyboard');
+                    },
                   ),
-                ),
-                const SizedBox(height: 14),
+                  const SizedBox(height: 14),
+                  if (_titleController.text.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF162340) : const Color(0xFFE8F5E9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF2E416B) : const Color(0xFFA5D6A7),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Erkannte Druckschrift: "${_titleController.text}"',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1B5E20),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                ] else ...[
+                  // Title
+                  TextField(
+                    controller: _titleController,
+                    autofocus: widget.task == null && _titleController.text.isEmpty,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    decoration: const InputDecoration(
+                      labelText: 'Aufgabentitel (Druckschrift) *',
+                      hintText: 'Was muss getan werden?',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
 
-                // Description
-                TextField(
-                  controller: _descController,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Details / Beschreibung (optional)',
+                  // Description
+                  TextField(
+                    controller: _descController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Details / Beschreibung (optional)',
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                ],
                 const SizedBox(height: 16),
 
                 // Due Date & Reminder Container

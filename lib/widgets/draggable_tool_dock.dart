@@ -11,6 +11,8 @@ class DraggableToolDock extends StatefulWidget {
   final VoidCallback onExportPdf;
   final VoidCallback onSearch;
   final VoidCallback onOpenAI;
+  final bool keyboardEnabled;
+  final VoidCallback? onToggleKeyboard;
 
   const DraggableToolDock({
     super.key,
@@ -24,6 +26,8 @@ class DraggableToolDock extends StatefulWidget {
     required this.onExportPdf,
     required this.onSearch,
     required this.onOpenAI,
+    this.keyboardEnabled = false,
+    this.onToggleKeyboard,
   });
 
   @override
@@ -90,10 +94,23 @@ class _DraggableToolDockState extends State<DraggableToolDock> {
 
               if (!_isCollapsed) ...[
                 const SizedBox(width: 4),
+                if (widget.onToggleKeyboard != null)
+                  _dockButton(
+                    icon: widget.keyboardEnabled
+                        ? Icons.keyboard_hide_rounded
+                        : Icons.keyboard_rounded,
+                    color: widget.keyboardEnabled
+                        ? const Color(0xFF66BB6A)
+                        : const Color(0xFF64B5F6),
+                    tooltip: widget.keyboardEnabled
+                        ? 'Tastatur ausblenden (Stift-Modus)'
+                        : 'Tastatur aktivieren (Tipp-Modus)',
+                    onTap: widget.onToggleKeyboard!,
+                  ),
                 _dockButton(
                   icon: Icons.draw_rounded,
                   color: const Color(0xFF42A5F5),
-                  tooltip: 'Stift & Zeichnen (Tablet Stylus)',
+                  tooltip: 'Stift & Zeichnen (Lenovo Pen / Stylus)',
                   onTap: widget.onOpenStylus,
                 ),
                 _dockButton(

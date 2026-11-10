@@ -11,6 +11,7 @@ import '../services/storage_service.dart';
 import '../services/task_service.dart';
 import '../widgets/a4_paper_sheet.dart';
 import '../widgets/audio_recorder_sheet.dart';
+import '../widgets/be_notiz_logo.dart';
 import '../widgets/checklist_to_tasks_dialog.dart';
 import '../widgets/draggable_tool_dock.dart';
 import '../widgets/math_ai_dialog.dart';
@@ -30,9 +31,12 @@ class NoteEditScreen extends StatefulWidget {
 class _NoteEditScreenState extends State<NoteEditScreen> {
   late TextEditingController _titleController;
   late TextEditingController _contentController;
+  final FocusNode _titleFocusNode = FocusNode();
+  final FocusNode _contentFocusNode = FocusNode();
   late Note _currentNote;
   bool _hasChanges = false;
   bool _isAIBusy = false;
+  bool _keyboardEnabled = false; // Primary input is Lenovo Pen / Stylus! Tastatur erst nach Button-Klick!
 
   // In-note search state
   bool _isSearching = false;
@@ -93,8 +97,36 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _titleFocusNode.dispose();
+    _contentFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _toggleKeyboard() {
+    setState(() {
+      _keyboardEnabled = !_keyboardEnabled;
+    });
+
+    if (!_keyboardEnabled) {
+      FocusScope.of(context).unfocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✍️ Stift-Modus aktiv: Tastatur ausgeblendet (Lenovo Pen)'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⌨️ Tastatur aktiviert: Du kannst nun Text tippen'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _contentFocusNode.requestFocus();
+      });
+    }
   }
 
   Future<void> _saveNote() async {
@@ -668,6 +700,8 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                 )
               : Row(
                   children: [
+                    const BENotizLogo(size: 28),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
@@ -687,6 +721,19 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                   ],
                 ),
           actions: [
+            // Tastatur anfordern / ausblenden Button (Stift-Modus)
+            if (!isReadOnly)
+              IconButton(
+                icon: Icon(
+                  _keyboardEnabled ? Icons.keyboard_hide_rounded : Icons.keyboard_outlined,
+                  color: _keyboardEnabled ? const Color(0xFF2E7D32) : const Color(0xFF1565C0),
+                ),
+                tooltip: _keyboardEnabled
+                    ? 'Tastatur ausblenden (Stift-Modus)'
+                    : 'Tastatur einblenden (Tipp-Modus)',
+                onPressed: _toggleKeyboard,
+              ),
+
             // A4 Vorlage wählen / hochladen
             IconButton(
               icon: const Icon(Icons.style_rounded, color: Color(0xFF1565C0)),
@@ -892,6 +939,86 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                     ),
                   ),
 
+                  // Stylus / Keyboard Mode Banner (Lenovo Pen support: Tastatur erst nach Klick)
+                  if (!isReadOnly)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _keyboardEnabled ? const Color(0xFFE8F5E9) : const Color(0xFFE3F2FD),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _keyboardEnabled ? const Color(0xFFA5D6A7) : const Color(0xFF90CAF9),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _keyboardEnabled ? Icons.keyboard_rounded : Icons.draw_rounded,
+                            size: 20,
+                            color: _keyboardEnabled ? const Color(0xFF2E7D32) : const Color(0xFF1565C0),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _keyboardEnabled
+                                      ? '⌨️ Tastatur aktiv (Tipp-Modus)'
+                                      : '✍️ Stift-Modus aktiv (Lenovo Pen)',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: _keyboardEnabled ? const Color(0xFF1B5E20) : const Color(0xFF0D47A1),
+                                  ),
+                                ),
+                                Text(
+                                  _keyboardEnabled
+                                      ? 'Tastatur ist aktiv. Tippe auf "Stift-Modus" zum Ausblenden.'
+                                      : 'Tastatur ist gesperrt. Tippe auf "Tastatur aktivieren" zum Tippen.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: _keyboardEnabled ? Colors.green.shade800 : Colors.blue.shade800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          if (!_keyboardEnabled)
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              icon: const Icon(Icons.edit_rounded, size: 14),
+                              label: const Text('Zeichnen', style: TextStyle(fontSize: 11)),
+                              onPressed: _openStylusCanvas,
+                            ),
+                          const SizedBox(width: 6),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _keyboardEnabled ? Colors.white : const Color(0xFF1565C0),
+                              foregroundColor: _keyboardEnabled ? const Color(0xFF2E7D32) : Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              visualDensity: VisualDensity.compact,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: Icon(
+                              _keyboardEnabled ? Icons.draw_rounded : Icons.keyboard_rounded,
+                              size: 15,
+                            ),
+                            label: Text(
+                              _keyboardEnabled ? 'Stift-Modus' : 'Tastatur aktivieren',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: _toggleKeyboard,
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Title & Body in authentic DIN A4 Paper Sheet
                   Expanded(
                     child: SingleChildScrollView(
@@ -904,14 +1031,25 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                           children: [
                             TextField(
                               controller: _titleController,
-                              readOnly: isReadOnly,
+                              focusNode: _titleFocusNode,
+                              readOnly: isReadOnly || !_keyboardEnabled,
+                              onTap: () {
+                                if (!_keyboardEnabled && !isReadOnly) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('✍️ Stift-Modus aktiv: Tastatur ist gesperrt. Tippe oben auf "Tastatur aktivieren", um mit Tastatur zu schreiben.'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              },
                               style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF0D253F),
                               ),
-                              decoration: const InputDecoration(
-                                hintText: 'Titel der Notiz...',
+                              decoration: InputDecoration(
+                                hintText: _keyboardEnabled ? 'Titel der Notiz...' : '✍️ Titel (Tastatur oben aktivieren zum Editieren)...',
                                 border: InputBorder.none,
                               ),
                               maxLines: null,
@@ -919,15 +1057,27 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                             const Divider(color: Color(0xFFE2E8F0), height: 20),
                             TextField(
                               controller: _contentController,
-                              readOnly: isReadOnly,
+                              focusNode: _contentFocusNode,
+                              readOnly: isReadOnly || !_keyboardEnabled,
+                              onTap: () {
+                                if (!_keyboardEnabled && !isReadOnly) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('✍️ Stift-Modus aktiv: Tastatur ist gesperrt. Tippe oben auf "Tastatur aktivieren", um mit Tastatur zu schreiben.'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              },
                               style: const TextStyle(
                                 fontSize: 16,
                                 height: 1.6,
                                 color: Color(0xFF1E293B),
                               ),
-                              decoration: const InputDecoration(
-                                hintText:
-                                    'Schreibe hier, füge Checklisten ein [ ], nutze den Tablet-Stift oder die verschiebbare Menüleiste...',
+                              decoration: InputDecoration(
+                                hintText: _keyboardEnabled
+                                    ? 'Schreibe hier, füge Checklisten ein [ ], nutze den Tablet-Stift oder die Menüleiste...'
+                                    : '✍️ Stift-Modus aktiv (Lenovo Pen). Nutze "Zeichnen" oder aktiviere oben die Tastatur zum Tippen...',
                                 border: InputBorder.none,
                               ),
                               maxLines: null,
@@ -1091,6 +1241,8 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
 
               // FREI VERSCHIEBBARE WERKZEUGLEISTE (Draggable Tool Dock)
               DraggableToolDock(
+                keyboardEnabled: _keyboardEnabled,
+                onToggleKeyboard: isReadOnly ? null : _toggleKeyboard,
                 onOpenStylus: _openStylusCanvas,
                 onOpenMathAI: _openMathAI,
                 onOpenAudio: _openAudioRecorder,

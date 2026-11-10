@@ -4,6 +4,7 @@ import '../models/task_item.dart';
 import '../services/ai_service.dart';
 import '../services/storage_service.dart';
 import '../services/task_service.dart';
+import '../widgets/be_notiz_logo.dart';
 import '../widgets/task_detail_dialog.dart';
 import '../widgets/task_edit_dialog.dart';
 import '../widgets/task_share_dialog.dart';
@@ -152,11 +153,12 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  void _openTaskEditor([TaskItem? task]) {
+  void _openTaskEditor([TaskItem? task, String initialMode = 'stylus']) {
     showDialog(
       context: context,
       builder: (ctx) => TaskEditDialog(
         task: task,
+        initialMode: task == null ? initialMode : 'keyboard',
         onSaved: (_) => _loadData(),
       ),
     );
@@ -362,18 +364,11 @@ class _TasksScreenState extends State<TasksScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(Icons.check_circle_rounded, color: theme.colorScheme.primary, size: 22),
-            ),
-            const SizedBox(width: 12),
-            const Text(
+            BENotizLogo(size: 32),
+            SizedBox(width: 12),
+            Text(
               'Aufgaben',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
             ),
@@ -450,11 +445,12 @@ class _TasksScreenState extends State<TasksScreen> {
                   },
                 ),
 
-                // CRUD Action Bar (Create, AI, Undo) - Responsive full-width
+                // CRUD Action Bar (Stylus Task, Text Task, AI, Undo) - Responsive full-width
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
                   child: Row(
                     children: [
+                      // Stylus task (Lenovo Pen / Handschrift -> Druckschrift)
                       Expanded(
                         flex: 3,
                         child: ElevatedButton.icon(
@@ -464,12 +460,13 @@ class _TasksScreenState extends State<TasksScreen> {
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          icon: const Icon(Icons.add_task_rounded, size: 18),
-                          label: const Text('Neue Aufgabe', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          onPressed: () => _openTaskEditor(),
+                          icon: const Icon(Icons.draw_rounded, size: 18),
+                          label: const Text('✍️ Stift-Aufgabe', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          onPressed: () => _openTaskEditor(null, 'stylus'),
                         ),
                       ),
                       const SizedBox(width: 8),
+                      // Text task directly
                       Expanded(
                         flex: 2,
                         child: OutlinedButton.icon(
@@ -477,8 +474,17 @@ class _TasksScreenState extends State<TasksScreen> {
                             minimumSize: const Size.fromHeight(42),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                          label: const Text('KI-Erkennung', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12)),
+                          icon: const Icon(Icons.add_task_rounded, size: 16),
+                          label: const Text('+ Text', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12)),
+                          onPressed: () => _openTaskEditor(null, 'keyboard'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // AI Recognition
+                      Tooltip(
+                        message: 'Aufgaben mit KI aus Text generieren',
+                        child: IconButton.filledTonal(
+                          icon: const Icon(Icons.auto_awesome_rounded, size: 18),
                           onPressed: _showAIExtractPrompt,
                         ),
                       ),

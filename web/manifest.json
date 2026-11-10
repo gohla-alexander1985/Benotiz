@@ -1,12 +1,14 @@
 {
-    "name": "notes_app",
-    "short_name": "notes_app",
-    "start_url": ".",
+    "name": "BEnotiz - Notizen & Aufgaben",
+    "short_name": "BEnotiz",
+    "start_url": "/Benotiz/",
+    "scope": "/Benotiz/",
+    "id": "/Benotiz/",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0B132B",
+    "theme_color": "#1565C0",
+    "description": "BEnotiz - DIN A4 Notizen, Stifteingabe & kollaborative Aufgabenverwaltung",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {
