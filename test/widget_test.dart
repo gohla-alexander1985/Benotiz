@@ -30,6 +30,10 @@ void main() {
 
   testWidgets('Selecting a template opens the note editor',
       (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
     await tester.pumpWidget(const BEnotizApp());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
@@ -48,15 +52,17 @@ void main() {
     await tester.tap(find.text('A4 Blanko'));
     await tester.pumpAndSettle();
 
-    // Should now be inside NoteEditScreen with stylus-mode banner
-    expect(find.text('DIN A4 Notizvorlage wählen'), findsNothing);
-    expect(find.text('✍️ Stift-Modus aktiv (Lenovo Pen)'), findsOneWidget);
-    expect(find.text('Tastatur aktivieren'), findsOneWidget);
+    // Now the title confirmation dialog appears
+    expect(find.text('Titel der Notiz'), findsOneWidget);
+    expect(find.text('Notiz erstellen & öffnen'), findsOneWidget);
 
-    // Activating the keyboard allows typing
-    await tester.tap(find.text('Tastatur aktivieren'));
+    // Confirm creation
+    await tester.tap(find.text('Notiz erstellen & öffnen'));
     await tester.pumpAndSettle();
-    expect(find.text('Titel der Notiz...'), findsOneWidget);
+
+    // Should now be inside the direct stylus canvas with the title & zoom
+    expect(find.text('Neue Notiz'), findsWidgets);
+    expect(find.text('100%'), findsOneWidget);
   });
 
   testWidgets('StylusCanvasScreen eraser can be toggled and protects template lines',

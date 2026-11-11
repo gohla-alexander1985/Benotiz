@@ -6,6 +6,7 @@ import '../services/sharing_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/be_notiz_logo.dart';
 import '../widgets/note_card.dart';
+import '../widgets/stylus_canvas_screen.dart';
 import '../widgets/template_picker_dialog.dart';
 import 'note_edit_screen.dart';
 
@@ -84,16 +85,124 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (template != null && mounted) {
-      final newNote = Note(
-        id: const Uuid().v4(),
-        title: template.defaultTitle,
-        content: template.defaultContent,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        paperType: template.paperType,
-        templateImageBase64: template.backgroundImageBase64,
+      // Dialog zur Eingabe des Titels mit Bestätigungsbutton
+      final titleCtrl = TextEditingController(
+        text: template.defaultTitle.isNotEmpty ? template.defaultTitle : '',
       );
-      _openNoteEditor(newNote);
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.edit_note_rounded, color: Color(0xFF1565C0)),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('Titel der Notiz', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.style_rounded, size: 16, color: Color(0xFF1565C0)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Gewählte Vorlage: ${template.name}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: titleCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Titel der Notiz eingeben',
+                  hintText: 'z.B. Besprechung, Vorlesung, Skizze...',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.title_rounded),
+                ),
+                onSubmitted: (_) => Navigator.pop(ctx, true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1565C0),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Notiz erstellen & öffnen', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () => Navigator.pop(ctx, true),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true && mounted) {
+        final enteredTitle = titleCtrl.text.trim().isNotEmpty
+            ? titleCtrl.text.trim()
+            : (template.defaultTitle.isNotEmpty ? template.defaultTitle : 'Neue Notiz');
+
+        Note newNote = Note(
+          id: const Uuid().v4(),
+          title: enteredTitle,
+          content: template.defaultContent,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          paperType: template.paperType,
+          templateImageBase64: template.backgroundImageBase64,
+        );
+        await StorageService.instance.saveOrUpdateNote(newNote);
+
+        if (mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (ctx) => StylusCanvasScreen(
+                title: newNote.title,
+                paperType: newNote.paperType,
+                initialDrawingData: newNote.drawingData,
+                onSave: (strokeData, imageBase64) async {
+                  newNote = newNote.copyWith(
+                    drawingData: strokeData,
+                    drawingImageBase64: imageBase64,
+                    updatedAt: DateTime.now(),
+                  );
+                  await StorageService.instance.saveOrUpdateNote(newNote);
+                },
+              ),
+            ),
+          );
+          _loadNotes();
+        }
+      }
     }
   }
 

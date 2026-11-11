@@ -157,6 +157,9 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
       context,
       MaterialPageRoute(
         builder: (ctx) => StylusCanvasScreen(
+          title: _titleController.text.trim().isNotEmpty
+              ? _titleController.text.trim()
+              : _currentNote.title,
           initialDrawingData: _currentNote.drawingData,
           paperType: _currentNote.paperType,
           onSave: (strokeJson, imageBase64) {
@@ -1171,7 +1174,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                                               TextButton.icon(
                                                 onPressed: _openStylusCanvas,
                                                 icon: const Icon(Icons.edit_rounded, size: 16),
-                                                label: const Text('Bearbeiten'),
+                                                label: const Text('Bearbeiten & Zoomen'),
                                               ),
                                               IconButton(
                                                 icon: const Icon(Icons.close_rounded, size: 18),
@@ -1184,17 +1187,56 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
                                       ),
                                     ),
                                     const Divider(height: 1),
-                                    Container(
-                                      constraints: const BoxConstraints(maxHeight: 280),
-                                      color: Colors.white,
-                                      child: Center(
-                                        child: Image.memory(
-                                          base64Decode(_currentNote.drawingImageBase64!),
-                                          fit: BoxFit.contain,
+                                    InkWell(
+                                      onTap: _openStylusCanvas,
+                                      child: Container(
+                                        constraints: const BoxConstraints(maxHeight: 340),
+                                        color: Colors.white,
+                                        child: Center(
+                                          child: Image.memory(
+                                            base64Decode(_currentNote.drawingImageBase64!),
+                                            fit: BoxFit.contain,
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ],
+                                ),
+                              ),
+                            ] else if (!_keyboardEnabled) ...[
+                              const SizedBox(height: 20),
+                              InkWell(
+                                onTap: _openStylusCanvas,
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE3F2FD).withAlpha(140),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: const Color(0xFF90CAF9), width: 1.5),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF1565C0),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.draw_rounded, color: Colors.white, size: 28),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      const Text(
+                                        '✍️ Tippen zum Schreiben mit dem Stift',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0D47A1)),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'Lenovo Pen / Stylus schreiben sofort • Finger zoomen & verschieben die Notiz',
+                                        style: TextStyle(fontSize: 12, color: Color(0xFF1565C0)),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],

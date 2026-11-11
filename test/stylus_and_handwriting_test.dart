@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -5,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:notes_app/screens/note_edit_screen.dart';
 import 'package:notes_app/widgets/be_notiz_logo.dart';
 import 'package:notes_app/widgets/handwriting_task_pad.dart';
+import 'package:notes_app/widgets/stylus_canvas_screen.dart';
 import 'package:notes_app/widgets/task_edit_dialog.dart';
 
 void main() {
@@ -22,6 +24,58 @@ void main() {
 
     expect(find.text('BE'), findsOneWidget);
     expect(find.text('notiz'), findsOneWidget);
+  });
+
+  testWidgets('StylusCanvasScreen shows title, supports zoom and palm rejection', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    String? savedStrokes;
+
+    await tester.pumpWidget(MaterialApp(
+      home: StylusCanvasScreen(
+        title: 'Besprechung Benker Tiefziehen',
+        paperType: 'lined',
+        onSave: (strokes, img) {
+          savedStrokes = strokes;
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify title is shown
+    expect(find.text('Besprechung Benker Tiefziehen'), findsWidgets);
+    expect(find.text('LINED'), findsOneWidget);
+
+    // Zoom indicator should be 100%
+    expect(find.text('100%'), findsOneWidget);
+
+    // Draw with stylus
+    final canvasFinder = find.byKey(const Key('stylus_drawing_canvas'));
+    expect(canvasFinder, findsOneWidget);
+    final center = tester.getCenter(canvasFinder);
+
+    // Draw stroke with stylus
+    final stylusGesture = await tester.startGesture(center, kind: PointerDeviceKind.stylus);
+    await stylusGesture.moveBy(const Offset(40, 20));
+    await stylusGesture.up();
+    await tester.pump();
+
+    // Touch with finger (palm rejection - must not crash or draw finger lines)
+    final fingerGesture = await tester.startGesture(center + const Offset(10, 10), kind: PointerDeviceKind.touch);
+    await fingerGesture.moveBy(const Offset(20, 20));
+    await fingerGesture.up();
+    await tester.pump();
+
+    // Save and verify strokes were captured from stylus
+    await tester.tap(find.text('Speichern'));
+    await tester.pump();
+    await tester.runAsync(() async => await Future.delayed(const Duration(milliseconds: 200)));
+    await tester.pumpAndSettle();
+
+    expect(savedStrokes, isNotNull);
+    expect(savedStrokes!.contains('"style"'), isTrue);
   });
 
   testWidgets('NoteEditScreen starts with keyboard disabled (stylus-first mode)', (tester) async {

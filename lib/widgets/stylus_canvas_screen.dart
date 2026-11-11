@@ -74,12 +74,14 @@ class DrawingStroke {
 }
 
 class StylusCanvasScreen extends StatefulWidget {
+  final String? title;
   final String? initialDrawingData;
   final String paperType;
   final Function(String strokeDataJson, String imageBase64) onSave;
 
   const StylusCanvasScreen({
     super.key,
+    this.title,
     this.initialDrawingData,
     this.paperType = 'blank',
     required this.onSave,
@@ -95,6 +97,10 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   final List<List<DrawingStroke>> _redoStack = [];
   DrawingStroke? _currentStroke;
 
+  final TransformationController _transformationController = TransformationController();
+  double _currentScale = 1.0;
+  bool _fingerDrawingEnabled = false; // Standardmäßig: Finger zoomen & verschieben, nur Stift zeichnet!
+
   Color _selectedColor = const Color(0xFF1565C0); // BEnotiz Blue
   double _strokeWidth = 3.5;
   PenStyle _selectedStyle = PenStyle.ballpoint;
@@ -102,7 +108,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   String _eraserMode = 'object'; // 'object' (Ganze Striche) oder 'precision' (Teil-Striche)
   double _eraserRadius = 24.0;
   Offset? _currentEraserPos;
-  bool _stylusOnlyMode = false; // Palm rejection
+  final bool _stylusOnlyMode = true; // Palm rejection ist standardmäßig aktiv!
 
   // Ruler state
   bool _showRuler = false;
@@ -126,7 +132,24 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   @override
   void initState() {
     super.initState();
+    _transformationController.addListener(_onZoomChanged);
     _loadInitialStrokes();
+  }
+
+  void _onZoomChanged() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    if ((scale - _currentScale).abs() > 0.03) {
+      setState(() {
+        _currentScale = scale;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _transformationController.removeListener(_onZoomChanged);
+    _transformationController.dispose();
+    super.dispose();
   }
 
   void _loadInitialStrokes() {
@@ -286,9 +309,16 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   void _onPointerDown(PointerDownEvent event) {
+    // Palm Rejection: Finger-Berührung (PointerDeviceKind.touch) darf KEINE Striche erzeugen!
+    // Finger sind ausschließlich für Pinch-to-Zoom und Verschieben reserviert.
+    if (!_fingerDrawingEnabled && event.kind == PointerDeviceKind.touch) {
+      return;
+    }
+
     if (_stylusOnlyMode &&
         event.kind != PointerDeviceKind.stylus &&
-        event.kind != PointerDeviceKind.invertedStylus) {
+        event.kind != PointerDeviceKind.invertedStylus &&
+        event.kind != PointerDeviceKind.mouse) {
       return;
     }
 
@@ -319,6 +349,10 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   void _onPointerMove(PointerMoveEvent event) {
+    if (!_fingerDrawingEnabled && event.kind == PointerDeviceKind.touch) {
+      return;
+    }
+
     final isHardwareEraser = event.kind == PointerDeviceKind.invertedStylus || _isEraser;
 
     if (isHardwareEraser) {
@@ -339,6 +373,10 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   void _onPointerUp(PointerUpEvent event) {
+    if (!_fingerDrawingEnabled && event.kind == PointerDeviceKind.touch) {
+      return;
+    }
+
     final isHardwareEraser = event.kind == PointerDeviceKind.invertedStylus || _isEraser;
 
     if (isHardwareEraser) {
@@ -405,6 +443,8 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
       return;
     }
 
+    final strokeJson = json.encode(_strokes.map((s) => s.toMap()).toList());
+
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     const canvasSize = Size(900, 1200);
@@ -420,14 +460,16 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
     painter.paint(canvas, canvasSize);
 
     final picture = recorder.endRecording();
-    final img = await picture.toImage(canvasSize.width.toInt(), canvasSize.height.toInt());
-    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    String base64Image = '';
+    try {
+      final img = await picture.toImage(canvasSize.width.toInt(), canvasSize.height.toInt());
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        base64Image = base64Encode(byteData.buffer.asUint8List());
+      }
+    } catch (_) {}
 
-    if (byteData != null) {
-      final base64Image = base64Encode(byteData.buffer.asUint8List());
-      final strokeJson = json.encode(_strokes.map((s) => s.toMap()).toList());
-      widget.onSave(strokeJson, base64Image);
-    }
+    widget.onSave(strokeJson, base64Image);
 
     if (mounted) Navigator.pop(context);
   }
@@ -443,27 +485,92 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
           icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Row(
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.draw_rounded, color: Color(0xFF1565C0)),
-            SizedBox(width: 8),
-            Text(
-              'Stifte & Lineale',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            const Icon(Icons.draw_rounded, color: Color(0xFF1565C0)),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: Text(
+                widget.title != null && widget.title!.isNotEmpty
+                    ? widget.title!
+                    : 'A4 Stift-Notiz',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD0E4FF),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                widget.paperType.toUpperCase(),
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1565C0)),
+              ),
             ),
           ],
         ),
         actions: [
-          // Palm Rejection Toggle Button
-          IconButton(
-            icon: Icon(
-              Icons.do_not_touch_rounded,
-              color: _stylusOnlyMode ? const Color(0xFF1565C0) : Colors.grey.shade600,
+          // Zoom level indicator and reset to 100%
+          InkWell(
+            onTap: () {
+              setState(() {
+                _transformationController.value = Matrix4.identity();
+                _currentScale = 1.0;
+              });
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD0E4FF),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.zoom_in_rounded, size: 15, color: Color(0xFF1565C0)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${(_currentScale * 100).round()}%',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF1565C0)),
+                  ),
+                ],
+              ),
             ),
-            tooltip: _stylusOnlyMode ? 'Nur Stift aktiv (Handballen ignoriert)' : 'Stift & Finger aktiv',
-            onPressed: () => setState(() => _stylusOnlyMode = !_stylusOnlyMode),
           ),
+          const SizedBox(width: 4),
+
+          // Palm Rejection & Finger Mode Toggle Button
+          Tooltip(
+            message: _fingerDrawingEnabled
+                ? 'Finger-Zeichnen aktiv (Tippen für Palm-Rejection & Zoom)'
+                : 'Palm-Rejection aktiv: Finger zoomen/verschieben, nur Stift zeichnet',
+            child: IconButton(
+              icon: Icon(
+                _fingerDrawingEnabled ? Icons.touch_app_rounded : Icons.pinch_rounded,
+                color: _fingerDrawingEnabled ? Colors.orange : const Color(0xFF1565C0),
+              ),
+              onPressed: () {
+                setState(() => _fingerDrawingEnabled = !_fingerDrawingEnabled);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      _fingerDrawingEnabled
+                          ? '👉 Finger-Zeichnen eingeschaltet'
+                          : '✋ Finger-Zoom & Verschieben aktiv (Stift zeichnet)',
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+          ),
+
           // Lineal Toggle
           IconButton(
             icon: Icon(
@@ -723,35 +830,86 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                 ),
               ),
 
-              // Interactive Stylus Drawing Canvas with A4 background
+              // Interactive Stylus Drawing Canvas with A4 background & Pinch-to-Zoom
               Expanded(
-                child: Listener(
-                  onPointerDown: _onPointerDown,
-                  onPointerMove: _onPointerMove,
-                  onPointerUp: _onPointerUp,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CustomPaint(
-                        painter: A4PaperPainter(paperType: widget.paperType),
-                        foregroundPainter: StylusCanvasPainter(
-                          strokes: _strokes,
-                          currentStroke: _currentStroke,
-                        ),
-                        size: Size.infinite,
-                      ),
-                      if (_currentEraserPos != null)
-                        CustomPaint(
-                          painter: EraserCursorPainter(
-                            position: _currentEraserPos!,
-                            radius: _eraserRadius,
+                child: Container(
+                  color: const Color(0xFFE8EEF5), // Schreibtisch-Hintergrund
+                  child: InteractiveViewer(
+                    transformationController: _transformationController,
+                    minScale: 0.5,
+                    maxScale: 3.5,
+                    boundaryMargin: const EdgeInsets.all(500),
+                    panEnabled: true,
+                    scaleEnabled: true,
+                    child: Container(
+                      width: 860,
+                      height: 1220,
+                      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(25),
+                            blurRadius: 15,
+                            offset: const Offset(0, 4),
                           ),
-                          size: Size.infinite,
+                        ],
+                      ),
+                      child: Listener(
+                        key: const Key('stylus_drawing_canvas'),
+                        behavior: HitTestBehavior.opaque,
+                        onPointerDown: _onPointerDown,
+                        onPointerMove: _onPointerMove,
+                        onPointerUp: _onPointerUp,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              CustomPaint(
+                                painter: A4PaperPainter(paperType: widget.paperType),
+                                foregroundPainter: StylusCanvasPainter(
+                                  strokes: _strokes,
+                                  currentStroke: _currentStroke,
+                                ),
+                                size: const Size(860, 1220),
+                              ),
+                              if (widget.title != null && widget.title!.isNotEmpty)
+                                Positioned(
+                                  top: 32,
+                                  left: 44,
+                                  right: 44,
+                                  child: IgnorePointer(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          widget.title!,
+                                          style: const TextStyle(
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF0D253F),
+                                          ),
+                                        ),
+                                        const Divider(color: Color(0xFFE2E8F0), thickness: 1.5, height: 16),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              if (_currentEraserPos != null)
+                                CustomPaint(
+                                  painter: EraserCursorPainter(
+                                    position: _currentEraserPos!,
+                                    radius: _eraserRadius,
+                                  ),
+                                  size: const Size(860, 1220),
+                                ),
+                            ],
+                          ),
                         ),
-                    ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
 
