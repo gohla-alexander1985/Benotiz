@@ -1,66 +1,66 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notes_app/widgets/stylus_canvas_screen.dart';
 
 void main() {
-  testWidgets('InteractiveViewer pan vs stylus test', (tester) async {
-    final controller = TransformationController();
-    final List<Offset> points = [];
+  testWidgets('StylusCanvasScreen: stylus drag DOES NOT move the page, exclusively fingers pan & zoom', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    String? savedStrokes;
 
     await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: SizedBox(
-            width: 400,
-            height: 400,
-            child: InteractiveViewer(
-              transformationController: controller,
-              minScale: 0.5,
-              maxScale: 3.0,
-              panEnabled: true,
-              scaleEnabled: true,
-              child: Container(
-                width: 400,
-                height: 400,
-                color: Colors.white,
-                child: Listener(
-                  key: const Key('drawing_listener'),
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (e) {
-                    if (e.kind == PointerDeviceKind.stylus || e.kind == PointerDeviceKind.mouse) {
-                      points.add(e.localPosition);
-                    }
-                  },
-                  onPointerMove: (e) {
-                    if (e.kind == PointerDeviceKind.stylus || e.kind == PointerDeviceKind.mouse) {
-                      points.add(e.localPosition);
-                    }
-                  },
-                ),
-              ),
-            ),
-          ),
-        ),
+      home: StylusCanvasScreen(
+        paperType: 'blank',
+        onSave: (strokes, img) {
+          savedStrokes = strokes;
+        },
       ),
     ));
+    await tester.pumpAndSettle();
 
-    final center = tester.getCenter(find.byKey(const Key('drawing_listener')));
-    
-    // Drag with stylus: points recorded, NO translation
+    final ivFinder = find.byType(InteractiveViewer);
+    expect(ivFinder, findsOneWidget);
+    final iv = tester.widget<InteractiveViewer>(ivFinder);
+    final controller = iv.transformationController!;
+
+    final initialTranslation = controller.value.getTranslation();
+    expect(initialTranslation.x, 0.0);
+    expect(initialTranslation.y, 0.0);
+
+    final canvasFinder = find.byKey(const Key('stylus_drawing_canvas'));
+    final center = tester.getCenter(canvasFinder);
+
+    // 1. Drag with STYLUS (Lenovo Pen) - page MUST NOT move!
     final stylusGesture = await tester.startGesture(center, kind: PointerDeviceKind.stylus);
-    await stylusGesture.moveBy(const Offset(50, 0));
+    await stylusGesture.moveBy(const Offset(120, 120));
     await stylusGesture.up();
+    await tester.pump();
 
-    expect(points.length, greaterThanOrEqualTo(2));
-    expect(controller.value.getTranslation().x, 0.0);
-    expect(controller.value.getTranslation().y, 0.0);
+    final translationAfterStylus = controller.value.getTranslation();
+    // Translation must remain 0.0, 0.0! Page MUST NOT move with stylus!
+    expect(translationAfterStylus.x, 0.0, reason: 'Stylus must not pan X');
+    expect(translationAfterStylus.y, 0.0, reason: 'Stylus must not pan Y');
 
-    // Now touch with finger: points MUST NOT increase!
-    final pointsCountBefore = points.length;
+    // 2. Drag with FINGER (Touch) - page MUST move!
     final fingerGesture = await tester.startGesture(center, kind: PointerDeviceKind.touch);
-    await fingerGesture.moveBy(const Offset(30, 20));
+    await fingerGesture.moveBy(const Offset(100, 80));
     await fingerGesture.up();
+    await tester.pump();
 
-    expect(points.length, pointsCountBefore); // No new points from finger!
+    final translationAfterFinger = controller.value.getTranslation();
+    // Translation MUST have changed!
+    expect(translationAfterFinger.x, isNot(equals(0.0)), reason: 'Finger must pan X');
+    expect(translationAfterFinger.y, isNot(equals(0.0)), reason: 'Finger must pan Y');
+
+    // 3. Save and verify stylus stroke was recorded
+    await tester.tap(find.text('Speichern'));
+    await tester.pump();
+    await tester.runAsync(() async => await Future.delayed(const Duration(milliseconds: 200)));
+    await tester.pumpAndSettle();
+
+    expect(savedStrokes, isNotNull);
   });
 }

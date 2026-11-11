@@ -73,6 +73,69 @@ class DrawingStroke {
   }
 }
 
+/// GestureRecognizer, der Stift- und Stylus-Eingaben (Lenovo Pen) in der Gesture Arena
+/// sofort für das Zeichnen beansprucht.
+/// Verhindert zu 100%, dass das übergeordnete InteractiveViewer beim Schreiben mit dem Stift
+/// die Seite ungewollt verschiebt oder pannt.
+/// Finger-Gesten (Touch) werden durchgelassen, damit Pinch-to-Zoom und Verschieben mit den Fingern
+/// butterweich funktionieren.
+class StylusPanBlockerGestureRecognizer extends OneSequenceGestureRecognizer {
+  final bool Function()? isStylusActive;
+  final bool Function()? fingerDrawingEnabled;
+
+  StylusPanBlockerGestureRecognizer({
+    this.isStylusActive,
+    this.fingerDrawingEnabled,
+    super.debugOwner,
+  });
+
+  @override
+  bool isPointerAllowed(PointerDownEvent event) {
+    // 1. Wenn Finger-Zeichnen manuell eingeschaltet wurde: Finger zeichnen auch und dürfen die Seite nicht verschieben
+    if (fingerDrawingEnabled?.call() == true) {
+      return true;
+    }
+
+    // 2. STIFT (Lenovo Pen / Stylus / Inverted Stylus):
+    // Stifte dürfen NIEMALS die Seite bewegen! Sie müssen immer sofort akzeptiert werden,
+    // damit das übergeordnete InteractiveViewer (ScaleGestureRecognizer) die Geste verliert.
+    if (event.kind == PointerDeviceKind.stylus ||
+        event.kind == PointerDeviceKind.invertedStylus) {
+      return true;
+    }
+
+    // 3. Maus (für Desktop/Web): Primäre Maustaste auf dem Papier zeichnet und verschiebt nicht
+    if (event.kind == PointerDeviceKind.mouse && event.buttons == kPrimaryMouseButton) {
+      return true;
+    }
+
+    // 4. Palm Rejection: Wenn der Stift gerade auf dem Blatt schreibt (aktiv down),
+    // darf auch die aufgelegte Hand (Touch) die Seite keinesfalls verschieben!
+    if (event.kind == PointerDeviceKind.touch && (isStylusActive?.call() ?? false)) {
+      return true;
+    }
+
+    // Finger (Touch) bei angehobenem Stift: Gibt false zurück -> Geht an InteractiveViewer
+    // für Pinch-to-Zoom und Verschieben!
+    return false;
+  }
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    startTrackingPointer(event.pointer, event.transform);
+    resolve(GestureDisposition.accepted);
+  }
+
+  @override
+  String get debugDescription => 'StylusPanBlockerGestureRecognizer';
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {}
+
+  @override
+  void handleEvent(PointerEvent event) {}
+}
+
 class StylusCanvasScreen extends StatefulWidget {
   final String? title;
   final String? initialDrawingData;
@@ -109,6 +172,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   double _eraserRadius = 24.0;
   Offset? _currentEraserPos;
   final bool _stylusOnlyMode = true; // Palm rejection ist standardmäßig aktiv!
+  int _activeStylusCount = 0; // Zählt aktive Stift-Berührungen auf dem Blatt
 
   // Ruler state
   bool _showRuler = false;
@@ -309,6 +373,10 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   void _onPointerDown(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.stylus || event.kind == PointerDeviceKind.invertedStylus) {
+      _activeStylusCount++;
+    }
+
     // Palm Rejection: Finger-Berührung (PointerDeviceKind.touch) darf KEINE Striche erzeugen!
     // Finger sind ausschließlich für Pinch-to-Zoom und Verschieben reserviert.
     if (!_fingerDrawingEnabled && event.kind == PointerDeviceKind.touch) {
@@ -373,6 +441,10 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   void _onPointerUp(PointerUpEvent event) {
+    if (event.kind == PointerDeviceKind.stylus || event.kind == PointerDeviceKind.invertedStylus) {
+      _activeStylusCount = max(0, _activeStylusCount - 1);
+    }
+
     if (!_fingerDrawingEnabled && event.kind == PointerDeviceKind.touch) {
       return;
     }
@@ -391,6 +463,18 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
       _strokes.add(_currentStroke!);
       _currentStroke = null;
     });
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    if (event.kind == PointerDeviceKind.stylus || event.kind == PointerDeviceKind.invertedStylus) {
+      _activeStylusCount = max(0, _activeStylusCount - 1);
+    }
+    if (_currentStroke != null) {
+      setState(() {
+        _strokes.add(_currentStroke!);
+        _currentStroke = null;
+      });
+    }
   }
 
   void _undo() {
@@ -841,27 +925,40 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                     boundaryMargin: const EdgeInsets.all(500),
                     panEnabled: true,
                     scaleEnabled: true,
-                    child: Container(
-                      width: 860,
-                      height: 1220,
-                      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withAlpha(25),
-                            blurRadius: 15,
-                            offset: const Offset(0, 4),
+                    child: RawGestureDetector(
+                      gestures: {
+                        StylusPanBlockerGestureRecognizer:
+                            GestureRecognizerFactoryWithHandlers<StylusPanBlockerGestureRecognizer>(
+                          () => StylusPanBlockerGestureRecognizer(
+                            isStylusActive: () => _activeStylusCount > 0,
+                            fingerDrawingEnabled: () => _fingerDrawingEnabled,
                           ),
-                        ],
-                      ),
-                      child: Listener(
-                        key: const Key('stylus_drawing_canvas'),
-                        behavior: HitTestBehavior.opaque,
-                        onPointerDown: _onPointerDown,
-                        onPointerMove: _onPointerMove,
-                        onPointerUp: _onPointerUp,
+                          (StylusPanBlockerGestureRecognizer instance) {},
+                        ),
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        width: 860,
+                        height: 1220,
+                        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(25),
+                              blurRadius: 15,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Listener(
+                          key: const Key('stylus_drawing_canvas'),
+                          behavior: HitTestBehavior.opaque,
+                          onPointerDown: _onPointerDown,
+                          onPointerMove: _onPointerMove,
+                          onPointerUp: _onPointerUp,
+                          onPointerCancel: _onPointerCancel,
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
@@ -910,6 +1007,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                     ),
                   ),
                 ),
+              ),
             ],
           ),
 
