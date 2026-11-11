@@ -82,15 +82,23 @@ class DrawingStroke {
 class StylusPanBlockerGestureRecognizer extends OneSequenceGestureRecognizer {
   final bool Function()? isStylusActive;
   final bool Function()? fingerDrawingEnabled;
+  final bool Function()? isPanMode;
 
   StylusPanBlockerGestureRecognizer({
     this.isStylusActive,
     this.fingerDrawingEnabled,
+    this.isPanMode,
     super.debugOwner,
   });
 
   @override
   bool isPointerAllowed(PointerDownEvent event) {
+    // Wenn der Verschieben-Modus (Hand-Tool) aktiv ist: Finger und Maus dürfen die Seite verschieben
+    if ((isPanMode?.call() ?? false) &&
+        (event.kind == PointerDeviceKind.touch || event.kind == PointerDeviceKind.mouse)) {
+      return false; // Weiterreichen an InteractiveViewer zum Verschieben
+    }
+
     // 1. Wenn Finger-Zeichnen manuell eingeschaltet wurde: Finger zeichnen auch und dürfen die Seite nicht verschieben
     if (fingerDrawingEnabled?.call() == true) {
       return true;
@@ -109,14 +117,12 @@ class StylusPanBlockerGestureRecognizer extends OneSequenceGestureRecognizer {
       return true;
     }
 
-    // 4. Palm Rejection: Wenn der Stift gerade auf dem Blatt schreibt (aktiv down),
-    // darf auch die aufgelegte Hand (Touch) die Seite keinesfalls verschieben!
-    if (event.kind == PointerDeviceKind.touch && (isStylusActive?.call() ?? false)) {
+    // 4. Palm Rejection & Ein-Finger-Schreibschutz: Im Stift-Schreibmodus wird 1-Finger/Handballen-Touch
+    // abgefangen, damit die aufliegende Hand das Blatt keinesfalls ungewollt mitzieht!
+    if (event.kind == PointerDeviceKind.touch) {
       return true;
     }
 
-    // Finger (Touch) bei angehobenem Stift: Gibt false zurück -> Geht an InteractiveViewer
-    // für Pinch-to-Zoom und Verschieben!
     return false;
   }
 
@@ -173,6 +179,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   Offset? _currentEraserPos;
   final bool _stylusOnlyMode = true; // Palm rejection ist standardmäßig aktiv!
   int _activeStylusCount = 0; // Zählt aktive Stift-Berührungen auf dem Blatt
+  bool _isPanMode = false; // Standardmäßig Stift-Schreibmodus: Blatt ist bombenfest verankert!
 
   // Ruler state
   bool _showRuler = false;
@@ -207,6 +214,13 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
         _currentScale = scale;
       });
     }
+  }
+
+  void _zoomTo(double targetScale) {
+    setState(() {
+      _currentScale = targetScale;
+      _transformationController.value = Matrix4.diagonal3Values(targetScale, targetScale, 1.0);
+    });
   }
 
   @override
@@ -374,7 +388,15 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
 
   void _onPointerDown(PointerDownEvent event) {
     if (event.kind == PointerDeviceKind.stylus || event.kind == PointerDeviceKind.invertedStylus) {
+      if (_isPanMode) {
+        setState(() => _isPanMode = false);
+      }
       _activeStylusCount++;
+    }
+
+    // Wenn der Verschieben-Modus aktiv ist, keine Striche zeichnen
+    if (_isPanMode) {
+      return;
     }
 
     // Palm Rejection: Finger-Berührung (PointerDeviceKind.touch) darf KEINE Striche erzeugen!
@@ -417,6 +439,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   void _onPointerMove(PointerMoveEvent event) {
+    if (_isPanMode) return;
     if (!_fingerDrawingEnabled && event.kind == PointerDeviceKind.touch) {
       return;
     }
@@ -445,6 +468,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
       _activeStylusCount = max(0, _activeStylusCount - 1);
     }
 
+    if (_isPanMode) return;
     if (!_fingerDrawingEnabled && event.kind == PointerDeviceKind.touch) {
       return;
     }
@@ -599,14 +623,19 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
           ],
         ),
         actions: [
+          // Zoom out (-)
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+            tooltip: 'Herauszoomen (-)',
+            onPressed: () {
+              final newScale = max(0.5, _currentScale - 0.2);
+              _zoomTo(newScale);
+            },
+          ),
+
           // Zoom level indicator and reset to 100%
           InkWell(
-            onTap: () {
-              setState(() {
-                _transformationController.value = Matrix4.identity();
-                _currentScale = 1.0;
-              });
-            },
+            onTap: () => _zoomTo(1.0),
             borderRadius: BorderRadius.circular(8),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -626,6 +655,16 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                 ],
               ),
             ),
+          ),
+
+          // Zoom in (+)
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+            tooltip: 'Hineinzoomen (+)',
+            onPressed: () {
+              final newScale = min(3.5, _currentScale + 0.2);
+              _zoomTo(newScale);
+            },
           ),
           const SizedBox(width: 4),
 
@@ -708,6 +747,46 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
+                      // Hand / Verschieben Tool Toggle (Blatt mit Fingern/Maus bewegen)
+                      InkWell(
+                        onTap: () => setState(() {
+                          _isPanMode = !_isPanMode;
+                          if (_isPanMode) _isEraser = false;
+                        }),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _isPanMode ? const Color(0xFFD0E4FF) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: _isPanMode ? const Color(0xFF1565C0) : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.pan_tool_rounded,
+                                size: 16,
+                                color: _isPanMode ? const Color(0xFF1565C0) : Colors.grey.shade700,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Verschieben',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: _isPanMode ? FontWeight.bold : FontWeight.w600,
+                                  color: _isPanMode ? const Color(0xFF1565C0) : Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const VerticalDivider(width: 12),
+
                       // Pen Styles Selector
                       _penStyleButton(PenStyle.ballpoint, Icons.edit_rounded, 'Kugelschreiber'),
                       _penStyleButton(PenStyle.fountain, Icons.history_edu_rounded, 'Füllfederhalter'),
@@ -723,7 +802,10 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
 
                       // Eraser Toggle
                       InkWell(
-                        onTap: () => setState(() => _isEraser = !_isEraser),
+                        onTap: () => setState(() {
+                          _isEraser = !_isEraser;
+                          if (_isEraser) _isPanMode = false;
+                        }),
                         borderRadius: BorderRadius.circular(10),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -755,7 +837,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                         ),
                       ),
 
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 8),
 
                       // Eraser Options (Mode & Radius)
                       if (_isEraser) ...[
@@ -923,7 +1005,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                     minScale: 0.5,
                     maxScale: 3.5,
                     boundaryMargin: const EdgeInsets.all(500),
-                    panEnabled: true,
+                    panEnabled: _isPanMode,
                     scaleEnabled: true,
                     child: RawGestureDetector(
                       gestures: {
@@ -932,6 +1014,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
                           () => StylusPanBlockerGestureRecognizer(
                             isStylusActive: () => _activeStylusCount > 0,
                             fingerDrawingEnabled: () => _fingerDrawingEnabled,
+                            isPanMode: () => _isPanMode,
                           ),
                           (StylusPanBlockerGestureRecognizer instance) {},
                         ),
@@ -1019,13 +1102,14 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
   }
 
   Widget _penStyleButton(PenStyle style, IconData icon, String tooltip) {
-    final isSelected = _selectedStyle == style && !_isEraser;
+    final isSelected = _selectedStyle == style && !_isEraser && !_isPanMode;
     return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: () => setState(() {
           _selectedStyle = style;
           _isEraser = false;
+          _isPanMode = false;
         }),
         borderRadius: BorderRadius.circular(10),
         child: Container(
