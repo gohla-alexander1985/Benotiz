@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 
 class DraggableToolDock extends StatefulWidget {
@@ -41,10 +42,13 @@ class _DraggableToolDockState extends State<DraggableToolDock> {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
+    final dockWidth = _isCollapsed ? 75.0 : min(screenSize.width - 24, 600.0);
+    final maxLeft = (screenSize.width - dockWidth).clamp(8.0, double.infinity);
+    final maxTop = (screenSize.height - 80.0).clamp(60.0, double.infinity);
 
     return Positioned(
-      left: _position.dx.clamp(8.0, (screenSize.width - (_isCollapsed ? 60 : 360)).clamp(8.0, double.infinity)),
-      top: _position.dy.clamp(60.0, (screenSize.height - 80).clamp(60.0, double.infinity)),
+      left: _position.dx.clamp(8.0, maxLeft),
+      top: _position.dy.clamp(60.0, maxTop),
       child: Material(
         elevation: 6,
         shadowColor: Colors.black26,
@@ -94,78 +98,92 @@ class _DraggableToolDockState extends State<DraggableToolDock> {
 
               if (!_isCollapsed) ...[
                 const SizedBox(width: 4),
-                if (widget.onToggleKeyboard != null)
-                  _dockButton(
-                    icon: widget.keyboardEnabled
-                        ? Icons.keyboard_hide_rounded
-                        : Icons.keyboard_rounded,
-                    color: widget.keyboardEnabled
-                        ? const Color(0xFF66BB6A)
-                        : const Color(0xFF64B5F6),
-                    tooltip: widget.keyboardEnabled
-                        ? 'Tastatur ausblenden (Stift-Modus)'
-                        : 'Tastatur aktivieren (Tipp-Modus)',
-                    onTap: widget.onToggleKeyboard!,
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: (screenSize.width - 100).clamp(120.0, 600.0),
                   ),
-                _dockButton(
-                  icon: Icons.draw_rounded,
-                  color: const Color(0xFF42A5F5),
-                  tooltip: 'Stift & Zeichnen (Lenovo Pen / Stylus)',
-                  onTap: widget.onOpenStylus,
-                ),
-                _dockButton(
-                  icon: Icons.calculate_rounded,
-                  color: const Color(0xFFFFB74D),
-                  tooltip: 'Mathe-KI (Formeln lösen & Fragen stellen)',
-                  onTap: widget.onOpenMathAI,
-                ),
-                _dockButton(
-                  icon: Icons.mic_rounded,
-                  color: const Color(0xFFEF5350),
-                  tooltip: 'Tonaufnahme mit KI',
-                  onTap: widget.onOpenAudio,
-                ),
-                _dockButton(
-                  icon: Icons.checklist_rounded,
-                  color: const Color(0xFF66BB6A),
-                  tooltip: 'Checkliste einfügen',
-                  onTap: widget.onInsertChecklist,
-                ),
-                _dockButton(
-                  icon: Icons.assignment_turned_in_rounded,
-                  color: const Color(0xFF26A69A),
-                  tooltip: 'Checklisten zu Aufgabenliste & Teilen',
-                  onTap: widget.onExportTasks,
-                ),
-                _dockButton(
-                  icon: Icons.text_fields_rounded,
-                  color: const Color(0xFFAB47BC),
-                  tooltip: 'Handschrift-zu-Text (OCR)',
-                  onTap: widget.onTranscribeHandwriting,
-                ),
-                _dockButton(
-                  icon: Icons.image_rounded,
-                  color: const Color(0xFF29B6F6),
-                  tooltip: 'Bild oder Kamera einfügen',
-                  onTap: widget.onInsertImage,
-                ),
-                _dockButton(
-                  icon: Icons.picture_as_pdf_rounded,
-                  color: const Color(0xFFFF7043),
-                  tooltip: 'PDF Export / Drucken',
-                  onTap: widget.onExportPdf,
-                ),
-                _dockButton(
-                  icon: Icons.search_rounded,
-                  color: const Color(0xFFB0BEC5),
-                  tooltip: 'In Notiz suchen',
-                  onTap: widget.onSearch,
-                ),
-                _dockButton(
-                  icon: Icons.auto_awesome_rounded,
-                  color: const Color(0xFF90CAF9),
-                  tooltip: 'KI-Assistent',
-                  onTap: widget.onOpenAI,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.onToggleKeyboard != null)
+                          _dockButton(
+                            icon: widget.keyboardEnabled
+                                ? Icons.keyboard_hide_rounded
+                                : Icons.keyboard_rounded,
+                            color: widget.keyboardEnabled
+                                ? const Color(0xFF66BB6A)
+                                : const Color(0xFF64B5F6),
+                            tooltip: widget.keyboardEnabled
+                                ? 'Tastatur ausblenden (Stift-Modus)'
+                                : 'Tastatur aktivieren (Tipp-Modus)',
+                            onTap: widget.onToggleKeyboard!,
+                          ),
+                        _dockButton(
+                          icon: Icons.draw_rounded,
+                          color: const Color(0xFF42A5F5),
+                          tooltip: 'Stift & Zeichnen (Lenovo Pen / Stylus)',
+                          onTap: widget.onOpenStylus,
+                        ),
+                        _dockButton(
+                          icon: Icons.calculate_rounded,
+                          color: const Color(0xFFFFB74D),
+                          tooltip: 'Mathe-KI (Formeln lösen & Fragen stellen)',
+                          onTap: widget.onOpenMathAI,
+                        ),
+                        _dockButton(
+                          icon: Icons.mic_rounded,
+                          color: const Color(0xFFEF5350),
+                          tooltip: 'Tonaufnahme mit KI',
+                          onTap: widget.onOpenAudio,
+                        ),
+                        _dockButton(
+                          icon: Icons.checklist_rounded,
+                          color: const Color(0xFF66BB6A),
+                          tooltip: 'Checkliste einfügen',
+                          onTap: widget.onInsertChecklist,
+                        ),
+                        _dockButton(
+                          icon: Icons.assignment_turned_in_rounded,
+                          color: const Color(0xFF26A69A),
+                          tooltip: 'Checklisten zu Aufgabenliste & Teilen',
+                          onTap: widget.onExportTasks,
+                        ),
+                        _dockButton(
+                          icon: Icons.text_fields_rounded,
+                          color: const Color(0xFFAB47BC),
+                          tooltip: 'Handschrift-zu-Text (OCR)',
+                          onTap: widget.onTranscribeHandwriting,
+                        ),
+                        _dockButton(
+                          icon: Icons.image_rounded,
+                          color: const Color(0xFF29B6F6),
+                          tooltip: 'Bild oder Kamera einfügen',
+                          onTap: widget.onInsertImage,
+                        ),
+                        _dockButton(
+                          icon: Icons.picture_as_pdf_rounded,
+                          color: const Color(0xFFFF7043),
+                          tooltip: 'PDF Export / Drucken',
+                          onTap: widget.onExportPdf,
+                        ),
+                        _dockButton(
+                          icon: Icons.search_rounded,
+                          color: const Color(0xFFB0BEC5),
+                          tooltip: 'In Notiz suchen',
+                          onTap: widget.onSearch,
+                        ),
+                        _dockButton(
+                          icon: Icons.auto_awesome_rounded,
+                          color: const Color(0xFF90CAF9),
+                          tooltip: 'KI-Assistent',
+                          onTap: widget.onOpenAI,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ],

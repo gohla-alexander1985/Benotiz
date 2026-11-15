@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:notes_app/screens/note_edit_screen.dart';
 import 'package:notes_app/widgets/be_notiz_logo.dart';
+import 'package:notes_app/widgets/draggable_tool_dock.dart';
 import 'package:notes_app/widgets/handwriting_task_pad.dart';
 import 'package:notes_app/widgets/stylus_canvas_screen.dart';
 import 'package:notes_app/widgets/task_edit_dialog.dart';
@@ -137,5 +138,42 @@ void main() {
 
     expect(find.byType(HandwritingTaskPad), findsNothing);
     expect(find.text('Aufgabentitel (Druckschrift) *'), findsOneWidget);
+  });
+
+  testWidgets('DraggableToolDock is rendered in StylusCanvasScreen with KI agents, checkboxes, math, and OCR', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(MaterialApp(
+      home: StylusCanvasScreen(
+        title: 'Test Notiz mit Menüleiste',
+        paperType: 'blank',
+        onSave: (strokes, img) {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify DraggableToolDock is present
+    expect(find.byType(DraggableToolDock), findsOneWidget);
+
+    // Verify tools are present via their icons
+    expect(find.byIcon(Icons.auto_awesome_rounded), findsOneWidget); // KI-Assistent
+    expect(find.byIcon(Icons.checklist_rounded), findsOneWidget); // Checkliste einfügen
+    expect(find.byIcon(Icons.assignment_turned_in_rounded), findsOneWidget); // Checkliste zu Aufgaben
+    expect(find.byIcon(Icons.calculate_rounded), findsOneWidget); // Mathe-KI
+    expect(find.byIcon(Icons.text_fields_rounded), findsOneWidget); // Handschrift-zu-Text (OCR)
+    expect(find.byIcon(Icons.mic_rounded), findsOneWidget); // Tonaufnahme
+    expect(find.byIcon(Icons.picture_as_pdf_rounded), findsOneWidget); // PDF Export
+
+    // Tapping on the KI-Assistent opens the bottom sheet
+    await tester.tap(find.byIcon(Icons.auto_awesome_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('KI-Assistent & Analyse'), findsOneWidget);
+    expect(find.text('Text & Handschrift analysieren & zusammenfassen'), findsOneWidget);
+    expect(find.text('Text verbessern & formatieren'), findsOneWidget);
+    expect(find.text('Aufgaben automatisch extrahieren'), findsOneWidget);
+    expect(find.text('Mathe-KI & Formelrechner'), findsOneWidget);
   });
 }

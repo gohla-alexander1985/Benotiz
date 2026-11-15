@@ -186,6 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
             context,
             MaterialPageRoute(
               builder: (ctx) => StylusCanvasScreen(
+                note: newNote,
                 title: newNote.title,
                 paperType: newNote.paperType,
                 initialDrawingData: newNote.drawingData,

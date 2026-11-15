@@ -21,8 +21,9 @@ import '../widgets/template_picker_dialog.dart';
 
 class NoteEditScreen extends StatefulWidget {
   final Note? note;
+  final bool autoFocusKeyboard;
 
-  const NoteEditScreen({super.key, this.note});
+  const NoteEditScreen({super.key, this.note, this.autoFocusKeyboard = false});
 
   @override
   State<NoteEditScreen> createState() => _NoteEditScreenState();
@@ -36,7 +37,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
   late Note _currentNote;
   bool _hasChanges = false;
   bool _isAIBusy = false;
-  bool _keyboardEnabled = false; // Primary input is Lenovo Pen / Stylus! Tastatur erst nach Button-Klick!
+  late bool _keyboardEnabled; // Primary input is Lenovo Pen / Stylus! Tastatur erst nach Button-Klick!
 
   // In-note search state
   bool _isSearching = false;
@@ -80,6 +81,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
 
     _titleController = TextEditingController(text: _currentNote.title);
     _contentController = TextEditingController(text: _currentNote.content);
+    _keyboardEnabled = widget.autoFocusKeyboard;
 
     _titleController.addListener(_markChanged);
     _contentController.addListener(_markChanged);
@@ -157,6 +159,7 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
       context,
       MaterialPageRoute(
         builder: (ctx) => StylusCanvasScreen(
+          note: _currentNote,
           title: _titleController.text.trim().isNotEmpty
               ? _titleController.text.trim()
               : _currentNote.title,
@@ -406,12 +409,13 @@ class _NoteEditScreenState extends State<NoteEditScreen> {
   void _showAIMenu() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,

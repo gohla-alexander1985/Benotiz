@@ -3,7 +3,17 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import '../models/note.dart';
+import '../screens/note_edit_screen.dart';
+import '../services/ai_service.dart';
+import '../services/storage_service.dart';
 import 'a4_paper_sheet.dart';
+import 'audio_recorder_sheet.dart';
+import 'checklist_to_tasks_dialog.dart';
+import 'draggable_tool_dock.dart';
+import 'math_ai_dialog.dart';
 
 enum PenStyle {
   ballpoint, // Kugelschreiber / Fineliner
@@ -143,6 +153,7 @@ class StylusPanBlockerGestureRecognizer extends OneSequenceGestureRecognizer {
 }
 
 class StylusCanvasScreen extends StatefulWidget {
+  final Note? note;
   final String? title;
   final String? initialDrawingData;
   final String paperType;
@@ -150,6 +161,7 @@ class StylusCanvasScreen extends StatefulWidget {
 
   const StylusCanvasScreen({
     super.key,
+    this.note,
     this.title,
     this.initialDrawingData,
     this.paperType = 'blank',
@@ -545,14 +557,7 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
     });
   }
 
-  Future<void> _saveAndExit() async {
-    if (_strokes.isEmpty) {
-      Navigator.pop(context);
-      return;
-    }
-
-    final strokeJson = json.encode(_strokes.map((s) => s.toMap()).toList());
-
+  Future<String> _renderCanvasToBase64() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     const canvasSize = Size(900, 1200);
@@ -576,10 +581,530 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
         base64Image = base64Encode(byteData.buffer.asUint8List());
       }
     } catch (_) {}
+    return base64Image;
+  }
+
+  Future<void> _saveAndExit() async {
+    if (_strokes.isEmpty) {
+      Navigator.pop(context);
+      return;
+    }
+
+    final strokeJson = json.encode(_strokes.map((s) => s.toMap()).toList());
+    final base64Image = await _renderCanvasToBase64();
 
     widget.onSave(strokeJson, base64Image);
 
     if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _toggleKeyboard() async {
+    final strokeJson = json.encode(_strokes.map((s) => s.toMap()).toList());
+    final base64Image = await _renderCanvasToBase64();
+    widget.onSave(strokeJson, base64Image);
+
+    if (!mounted) return;
+
+    if (widget.note != null) {
+      final updatedNote = widget.note!.copyWith(
+        drawingData: strokeJson,
+        drawingImageBase64: base64Image,
+        updatedAt: DateTime.now(),
+      );
+      await StorageService.instance.saveOrUpdateNote(updatedNote);
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (ctx) => NoteEditScreen(
+              note: updatedNote,
+              autoFocusKeyboard: true,
+            ),
+          ),
+        );
+      }
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
+  void _openStylus() {
+    setState(() {
+      _isEraser = false;
+      _isPanMode = false;
+      _selectedStyle = PenStyle.ballpoint;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('✍️ Stift ausgewählt (Lenovo Pen / Stylus)'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  Future<void> _openMathAI() async {
+    final imageBase64 = await _renderCanvasToBase64();
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => MathAIDialog(
+        initialText: widget.title,
+        drawingImageBase64: imageBase64.isNotEmpty ? imageBase64 : null,
+        onInsertSolution: (solution) {
+          _showSolutionDialog(solution);
+        },
+      ),
+    );
+  }
+
+  void _showSolutionDialog(String solution) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.calculate_rounded, color: Color(0xFF1565C0)),
+            SizedBox(width: 8),
+            Text('Mathe-KI Lösung'),
+          ],
+        ),
+        content: SelectableText(solution),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openAudioRecorder() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => AudioRecorderSheet(
+        onTranscriptionComplete: (transcript) {
+          showDialog(
+            context: context,
+            builder: (c) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.mic_rounded, color: Color(0xFF1565C0)),
+                  SizedBox(width: 8),
+                  Text('Audio-Transkript'),
+                ],
+              ),
+              content: SelectableText(transcript),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(c),
+                  child: const Text('Schließen'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _insertChecklist() {
+    final textCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.checklist_rounded, color: Color(0xFF66BB6A)),
+            SizedBox(width: 8),
+            Text('Checkliste / Aufgabe hinzufügen'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Füge einen Checklisten-Punkt ein, der direkt mit der Aufgabenliste synchronisiert werden kann:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: textCtrl,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'z.B. Dokumente überprüfen...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                prefixText: '[ ] ',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1565C0),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              final val = textCtrl.text.trim();
+              Navigator.pop(ctx);
+              if (val.isNotEmpty && widget.note != null) {
+                final existingContent = widget.note!.content;
+                final updatedContent = existingContent.isEmpty
+                    ? '[ ] $val'
+                    : '$existingContent\n[ ] $val';
+                final updatedNote = widget.note!.copyWith(
+                  content: updatedContent,
+                  updatedAt: DateTime.now(),
+                );
+                await StorageService.instance.saveOrUpdateNote(updatedNote);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Checkliste hinzugefügt: [ ] $val'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Hinzufügen'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openChecklistToTasks() async {
+    String content = widget.note?.content ?? '';
+    if (_strokes.isNotEmpty) {
+      final img = await _renderCanvasToBase64();
+      if (img.isNotEmpty) {
+        final ocr = await AIService.instance.transcribeHandwriting(img);
+        if (ocr.isNotEmpty) {
+          content = content.isNotEmpty ? '$content\n$ocr' : ocr;
+        }
+      }
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => ChecklistToTasksDialog(
+        noteContent: content,
+        noteTitle: widget.title ?? widget.note?.title ?? 'Notiz',
+        noteId: widget.note?.id ?? 'canvas_note',
+      ),
+    );
+  }
+
+  Future<void> _transcribeHandwriting() async {
+    if (_strokes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keine Stift-Zeichnung zum Transkribieren vorhanden.')),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            SizedBox(width: 12),
+            Text('Handschrift wird mit KI in Druckschrift umgewandelt...'),
+          ],
+        ),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    final img = await _renderCanvasToBase64();
+    final text = await AIService.instance.transcribeHandwriting(img);
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.text_fields_rounded, color: Color(0xFF1565C0)),
+              SizedBox(width: 8),
+              Text('Erkannte Handschrift'),
+            ],
+          ),
+          content: SelectableText(text.isNotEmpty ? text : 'Keine Schrift erkannt.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Schließen'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: Color(0xFF1565C0)),
+              title: const Text('Aus Galerie wählen'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded, color: Color(0xFF1565C0)),
+              title: const Text('Foto aufnehmen (Kamera)'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source != null) {
+      final picked = await picker.pickImage(source: source, maxWidth: 1200, imageQuality: 85);
+      if (picked != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bild "${picked.name}" ausgewählt.'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    final title = widget.title ?? widget.note?.title ?? 'BEnotiz';
+    final content = widget.note?.content ?? '';
+
+    final exportText = '📄 $title (DIN A4 Stift-Notiz)\n\n'
+        '$content\n\n'
+        '---\nErstellt mit BEnotiz (Lenovo Pen / Stylus)';
+
+    await SharePlus.instance.share(
+      ShareParams(
+        text: exportText,
+        subject: 'PDF Export: $title',
+      ),
+    );
+  }
+
+  void _searchInNote() {
+    final searchCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.search_rounded, color: Color(0xFF1565C0)),
+            SizedBox(width: 8),
+            Text('In Notiz suchen'),
+          ],
+        ),
+        content: TextField(
+          controller: searchCtrl,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Suchbegriff eingeben...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            prefixIcon: const Icon(Icons.search),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAIMenu() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE3F2FD),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.auto_awesome, color: Color(0xFF1565C0)),
+                      ),
+                      const SizedBox(width: 12),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('KI-Assistent & Analyse', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          Text('Wähle eine KI-Aktion für deine Notiz', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE8F5E9),
+                    child: Icon(Icons.analytics_rounded, color: Color(0xFF2E7D32)),
+                  ),
+                  title: const Text('Text & Handschrift analysieren & zusammenfassen', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Kernaussagen, Schlagwörter & Zusammenfassung'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _handleAIAction('summarize');
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFFFF3E0),
+                    child: Icon(Icons.spellcheck_rounded, color: Color(0xFFE65100)),
+                  ),
+                  title: const Text('Text verbessern & formatieren', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Grammatik, Gliederung und Lesbarkeit optimieren'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _handleAIAction('improve');
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFEDE7F6),
+                    child: Icon(Icons.checklist_rtl_rounded, color: Color(0xFF512DA8)),
+                  ),
+                  title: const Text('Aufgaben automatisch extrahieren', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('To-Dos erkennen und direkt in Aufgabenliste übertragen'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openChecklistToTasks();
+                  },
+                ),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE3F2FD),
+                    child: Icon(Icons.calculate_rounded, color: Color(0xFF1565C0)),
+                  ),
+                  title: const Text('Mathe-KI & Formelrechner', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Formeln lösen, Prozentrechnung, Gleichungen oder Geometrie'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openMathAI();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handleAIAction(String action) async {
+    String text = widget.note?.content ?? '';
+    if (_strokes.isNotEmpty) {
+      final img = await _renderCanvasToBase64();
+      final ocr = await AIService.instance.transcribeHandwriting(img);
+      if (ocr.isNotEmpty) {
+        text = text.isNotEmpty ? '$text\n$ocr' : ocr;
+      }
+    }
+
+    if (text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kein Text oder keine Handschrift zum Analysieren vorhanden.')),
+        );
+      }
+      return;
+    }
+
+    if (action == 'summarize') {
+      final summary = await AIService.instance.summarizeText(text);
+      if (mounted) {
+        _showAIResultDialog('Textanalyse & Zusammenfassung', summary);
+      }
+    } else if (action == 'improve') {
+      final improved = await AIService.instance.improveWriting(text);
+      if (mounted) {
+        _showAIResultDialog('Optimierter Text', improved);
+      }
+    }
+  }
+
+  void _showAIResultDialog(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3F2FD),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.auto_awesome, color: Color(0xFF1565C0), size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540, maxHeight: 460),
+          child: SingleChildScrollView(
+            child: SelectableText(content, style: const TextStyle(height: 1.45, fontSize: 14)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1096,6 +1621,22 @@ class _StylusCanvasScreenState extends State<StylusCanvasScreen> {
 
           // VIRTUAL INTERACTIVE RULER OVERLAY
           if (_showRuler) _buildRulerOverlay(),
+
+          // FREI VERSCHIEBBARE WERKZEUGLEISTE (Draggable Tool Dock mit KI-Agenten, Checkboxen, etc.)
+          DraggableToolDock(
+            keyboardEnabled: false,
+            onToggleKeyboard: _toggleKeyboard,
+            onOpenStylus: _openStylus,
+            onOpenMathAI: _openMathAI,
+            onOpenAudio: _openAudioRecorder,
+            onInsertImage: _pickImage,
+            onInsertChecklist: _insertChecklist,
+            onExportTasks: _openChecklistToTasks,
+            onTranscribeHandwriting: _transcribeHandwriting,
+            onExportPdf: _exportPdf,
+            onSearch: _searchInNote,
+            onOpenAI: _showAIMenu,
+          ),
         ],
       ),
     );
