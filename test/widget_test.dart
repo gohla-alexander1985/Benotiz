@@ -275,5 +275,68 @@ Bitte Herrn Schmidt anrufen und das Protokoll versenden.
       expect(loaded.isCompleted, isFalse);
       expect(loaded.completedBy, isNull);
     });
+
+    test('TaskAttachment handles PDF and Image metadata, size formatting, and serialization', () {
+      final pdfAtt = TaskAttachment(
+        id: 'att_1',
+        name: 'Zeichnung_Bauteil_A.pdf',
+        mimeType: 'application/pdf',
+        base64Data: 'JVBERi0xLjQK...',
+        sizeBytes: 2048576,
+      );
+
+      expect(pdfAtt.isPdf, isTrue);
+      expect(pdfAtt.isImage, isFalse);
+      expect(pdfAtt.formattedSize, '2.0 MB');
+
+      final imgAtt = TaskAttachment(
+        id: 'att_2',
+        name: 'Werkzeug_Foto.png',
+        mimeType: 'image/png',
+        base64Data: 'iVBORw0KGgo...',
+        sizeBytes: 512000,
+      );
+
+      expect(imgAtt.isPdf, isFalse);
+      expect(imgAtt.isImage, isTrue);
+      expect(imgAtt.formattedSize, '500.0 KB');
+
+      final taskWithAtts = TaskItem.create(
+        title: 'Werkzeugprüfung mit Dokumentation',
+        attachments: [pdfAtt, imgAtt],
+      );
+
+      expect(taskWithAtts.attachments.length, 2);
+
+      final map = taskWithAtts.toMap();
+      final restored = TaskItem.fromMap(map);
+
+      expect(restored.attachments.length, 2);
+      expect(restored.attachments[0].name, 'Zeichnung_Bauteil_A.pdf');
+      expect(restored.attachments[0].isPdf, isTrue);
+      expect(restored.attachments[1].name, 'Werkzeug_Foto.png');
+      expect(restored.attachments[1].isImage, isTrue);
+    });
+
+    testWidgets('TasksScreen does not show top action buttons and keeps bottom Neue Aufgabe button', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(const BEnotizApp());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Navigate to Aufgaben
+      await tester.tap(find.text('Aufgaben'));
+      await tester.pumpAndSettle();
+
+      // Verify the removed top buttons are gone
+      expect(find.text('✍️ Stift-Aufgabe'), findsNothing);
+      expect(find.text('+ Text'), findsNothing);
+
+      // Verify the bottom Neue Aufgabe button is present
+      expect(find.text('Neue Aufgabe'), findsOneWidget);
+    });
   });
 }

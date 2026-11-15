@@ -445,63 +445,6 @@ class _TasksScreenState extends State<TasksScreen> {
                   },
                 ),
 
-                // CRUD Action Bar (Stylus Task, Text Task, AI, Undo) - Responsive full-width
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-                  child: Row(
-                    children: [
-                      // Stylus task (Lenovo Pen / Handschrift -> Druckschrift)
-                      Expanded(
-                        flex: 3,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(42),
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          icon: const Icon(Icons.draw_rounded, size: 18),
-                          label: const Text('✍️ Stift-Aufgabe', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          onPressed: () => _openTaskEditor(null, 'stylus'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Text task directly
-                      Expanded(
-                        flex: 2,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(42),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          icon: const Icon(Icons.add_task_rounded, size: 16),
-                          label: const Text('+ Text', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12)),
-                          onPressed: () => _openTaskEditor(null, 'keyboard'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // AI Recognition
-                      Tooltip(
-                        message: 'Aufgaben mit KI aus Text generieren',
-                        child: IconButton.filledTonal(
-                          icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-                          onPressed: _showAIExtractPrompt,
-                        ),
-                      ),
-                      if (TaskService.instance.canUndo) ...[
-                        const SizedBox(width: 8),
-                        Tooltip(
-                          message: 'Rückgängig machen (Undo)',
-                          child: IconButton.filledTonal(
-                            icon: const Icon(Icons.undo_rounded, size: 20),
-                            onPressed: _undoLastAction,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
                 // Search Bar (Read / Filter)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -833,6 +776,38 @@ class _TasksScreenState extends State<TasksScreen> {
                                                             fontSize: 11,
                                                             fontWeight: FontWeight.bold,
                                                             color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1565C0),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+
+                                                // Attachments count badge
+                                                if (task.attachments.isNotEmpty)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                        horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.deepPurple.withAlpha(25),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(Icons.attach_file_rounded,
+                                                            size: 11,
+                                                            color: isDark
+                                                                ? const Color(0xFFD1C4E9)
+                                                                : Colors.deepPurple),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          '${task.attachments.length} Anhang/Anhänge',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: isDark
+                                                                ? const Color(0xFFD1C4E9)
+                                                                : Colors.deepPurple,
                                                           ),
                                                         ),
                                                       ],

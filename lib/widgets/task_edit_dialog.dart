@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import '../models/task_item.dart';
 import '../services/task_service.dart';
 import 'handwriting_task_pad.dart';
@@ -34,6 +37,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
   String? _selectedGroup;
   List<String> _availableGroups = [];
   late String _inputMode; // 'stylus' or 'keyboard'
+  List<TaskAttachment> _attachments = [];
 
   @override
   void initState() {
@@ -50,6 +54,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
     _reminderDateTime = t?.reminderDateTime;
     _priority = t?.priority ?? 'medium';
     _selectedGroup = t?.assignedGroup;
+    _attachments = List.from(t?.attachments ?? []);
 
     _loadGroups();
   }
@@ -191,6 +196,168 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
     }
   }
 
+  Future<void> _pickAttachment() async {
+    try {
+      final pickedFiles = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
+      );
+
+      if (pickedFiles.isNotEmpty) {
+        final newAttachments = <TaskAttachment>[];
+        for (final file in pickedFiles) {
+          final bytes = await file.readAsBytes();
+          if (bytes.isEmpty) continue;
+          final name = file.name;
+          final ext = name.split('.').last.toLowerCase();
+          String mime = 'application/octet-stream';
+          if (ext == 'pdf') {
+            mime = 'application/pdf';
+          } else if (['png', 'jpg', 'jpeg', 'webp', 'gif'].contains(ext)) {
+            mime = 'image/$ext';
+            if (ext == 'jpg') mime = 'image/jpeg';
+          }
+
+          final base64 = base64Encode(bytes);
+          newAttachments.add(
+            TaskAttachment(
+              id: const Uuid().v4(),
+              name: name,
+              mimeType: mime,
+              base64Data: base64,
+              sizeBytes: bytes.length,
+            ),
+          );
+        }
+
+        if (newAttachments.isNotEmpty) {
+          setState(() {
+            _attachments.addAll(newAttachments);
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('📎 ${newAttachments.length} Datei(en) angehängt!'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Auswählen von Dateien: $e')),
+        );
+      }
+    }
+  }
+
+  void _previewAttachment(TaskAttachment att) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540, maxHeight: 600),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        att.isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                        color: att.isPdf ? Colors.red : Theme.of(ctx).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          att.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  if (att.isImage)
+                    Expanded(
+                      child: InteractiveViewer(
+                        panEnabled: true,
+                        boundaryMargin: const EdgeInsets.all(20),
+                        minScale: 0.5,
+                        maxScale: 4,
+                        child: Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.memory(
+                              base64Decode(att.base64Data),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.picture_as_pdf_rounded, size: 72, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text(
+                              att.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'PDF-Dokument (${att.formattedSize})',
+                              style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF162340) : Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'Dokument ist der Aufgabe fest angehängt.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Schließen'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _saveTask({bool andShare = false}) async {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
@@ -215,6 +382,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
           ? _assignedToController.text.trim()
           : null,
       assignedGroup: _selectedGroup,
+      attachments: _attachments,
       updatedAt: DateTime.now(),
     );
 
@@ -263,6 +431,77 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
     );
   }
 
+  Widget _buildAttachmentItem(TaskAttachment att, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF131D38) : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: isDark ? const Color(0xFF2A3D66) : Colors.grey.shade300),
+      ),
+      child: Row(
+        children: [
+          if (att.isImage)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: GestureDetector(
+                onTap: () => _previewAttachment(att),
+                child: Image.memory(
+                  base64Decode(att.base64Data),
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Icon(Icons.broken_image, size: 28),
+                ),
+              ),
+            )
+          else if (att.isPdf)
+            GestureDetector(
+              onTap: () => _previewAttachment(att),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(30),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.red, size: 26),
+              ),
+            )
+          else
+            const Icon(Icons.insert_drive_file_outlined, size: 30),
+          const SizedBox(width: 10),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _previewAttachment(att),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    att.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${att.isPdf ? "PDF Dokument" : (att.isImage ? "Bild" : "Datei")} • ${att.formattedSize}',
+                    style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 18, color: Colors.red),
+            tooltip: 'Anhang entfernen',
+            onPressed: () => setState(() => _attachments.remove(att)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -288,8 +527,10 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                         color: theme.colorScheme.primaryContainer,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.check_circle_outline_rounded,
-                          color: theme.colorScheme.primary),
+                      child: Icon(
+                        _inputMode == 'stylus' ? Icons.draw_rounded : Icons.check_circle_outline_rounded,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -302,8 +543,8 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                           ),
                           Text(
                             _inputMode == 'stylus'
-                                ? '✍️ Stifteingabe (Handschrift -> Druckschrift)'
-                                : '⌨️ Druckschrift / Tastatur',
+                                ? '✍️ Stifteingabe'
+                                : '⌨️ Tastatureingabe',
                             style: TextStyle(
                               fontSize: 12,
                               color: isDark ? const Color(0xFF90CAF9) : Colors.grey.shade600,
@@ -312,29 +553,28 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                         ],
                       ),
                     ),
+                    // Toggle keyboard / stylus button
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: Icon(
+                        _inputMode == 'stylus' ? Icons.keyboard_rounded : Icons.draw_rounded,
+                        size: 16,
+                      ),
+                      label: Text(
+                        _inputMode == 'stylus' ? 'Tastatur verwenden' : 'Stifteingabe',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _inputMode = _inputMode == 'stylus' ? 'keyboard' : 'stylus';
+                        });
+                      },
+                    ),
                   ],
-                ),
-                const SizedBox(height: 16),
-
-                // Mode Switcher: Stylus vs Keyboard
-                SizedBox(
-                  width: double.infinity,
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                        value: 'stylus',
-                        icon: Icon(Icons.draw_rounded, size: 16),
-                        label: Text('✍️ Stift (Handschrift)', style: TextStyle(fontSize: 12)),
-                      ),
-                      ButtonSegment(
-                        value: 'keyboard',
-                        icon: Icon(Icons.keyboard_rounded, size: 16),
-                        label: Text('⌨️ Tastatur / Text', style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                    selected: {_inputMode},
-                    onSelectionChanged: (set) => setState(() => _inputMode = set.first),
-                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -375,13 +615,12 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                         if (convertedDesc.isNotEmpty) {
                           _descController.text = convertedDesc;
                         }
-                        _inputMode = 'keyboard';
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('✨ Handschrift erfolgreich in Druckschrift umgewandelt!'),
-                          backgroundColor: Color(0xFF2E7D32),
-                          duration: Duration(seconds: 3),
+                        SnackBar(
+                          content: Text('✨ In Druckschrift umgewandelt: "$convertedTitle"'),
+                          backgroundColor: const Color(0xFF2E7D32),
+                          duration: const Duration(seconds: 3),
                         ),
                       );
                     },
@@ -389,7 +628,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                       setState(() => _inputMode = 'keyboard');
                     },
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   if (_titleController.text.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -413,6 +652,11 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                                 color: isDark ? const Color(0xFF90CAF9) : const Color(0xFF1B5E20),
                               ),
                             ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit, size: 16),
+                            tooltip: 'Mit Tastatur bearbeiten',
+                            onPressed: () => setState(() => _inputMode = 'keyboard'),
                           ),
                         ],
                       ),
@@ -441,6 +685,47 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                   ),
                   const SizedBox(height: 16),
                 ],
+
+                // Attachments Container (PDFs & Images)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF182647) : const Color(0xFFF8FAFC),
+                    border: Border.all(color: isDark ? const Color(0xFF283B63) : Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.attach_file_rounded, size: 18, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Anhänge (${_attachments.length})',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: const Icon(Icons.add_photo_alternate_outlined, size: 16),
+                            label: const Text('PDF / Bild anhängen', style: TextStyle(fontSize: 12)),
+                            onPressed: _pickAttachment,
+                          ),
+                        ],
+                      ),
+                      if (_attachments.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        ..._attachments.map((att) => _buildAttachmentItem(att, isDark)),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
                 const SizedBox(height: 16),
 
                 // Due Date & Reminder Container

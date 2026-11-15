@@ -125,14 +125,14 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Verify segmented button and HandwritingTaskPad are shown
-    expect(find.text('✍️ Stift (Handschrift)'), findsOneWidget);
-    expect(find.text('⌨️ Tastatur / Text'), findsOneWidget);
+    // Verify toggle button, attachment button, and HandwritingTaskPad are shown
+    expect(find.text('Tastatur verwenden'), findsOneWidget);
+    expect(find.text('PDF / Bild anhängen'), findsOneWidget);
     expect(find.byType(HandwritingTaskPad), findsOneWidget);
     expect(find.text('In Druckschrift umwandeln'), findsOneWidget);
 
     // Can toggle to keyboard mode
-    await tester.tap(find.text('⌨️ Tastatur / Text'));
+    await tester.tap(find.text('Tastatur verwenden'));
     await tester.pumpAndSettle();
 
     expect(find.byType(HandwritingTaskPad), findsNothing);

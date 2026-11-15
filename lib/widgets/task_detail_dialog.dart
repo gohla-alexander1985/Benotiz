@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/task_item.dart';
@@ -349,7 +350,24 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
+
+                      // Attachments Section
+                      if (_task.attachments.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            Icon(Icons.attach_file_rounded, size: 18, color: isDark ? const Color(0xFFD1C4E9) : Colors.deepPurple),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Anhänge (${_task.attachments.length})',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ..._task.attachments.map((att) => _buildDetailAttachmentItem(att, isDark)),
+                        const SizedBox(height: 16),
+                      ],
 
                       // Comments Section
                       Row(
@@ -591,6 +609,173 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDetailAttachmentItem(TaskAttachment att, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF131D38) : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: isDark ? const Color(0xFF2A3D66) : Colors.grey.shade300),
+      ),
+      child: InkWell(
+        onTap: () => _previewAttachment(att),
+        borderRadius: BorderRadius.circular(8),
+        child: Row(
+          children: [
+            if (att.isImage)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.memory(
+                  base64Decode(att.base64Data),
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Icon(Icons.broken_image, size: 28),
+                ),
+              )
+            else if (att.isPdf)
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(30),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.red, size: 26),
+              )
+            else
+              const Icon(Icons.insert_drive_file_outlined, size: 30),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    att.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${att.isPdf ? "PDF Dokument" : (att.isImage ? "Bild" : "Datei")} • ${att.formattedSize}',
+                    style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.open_in_new_rounded, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _previewAttachment(TaskAttachment att) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540, maxHeight: 600),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        att.isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                        color: att.isPdf ? Colors.red : Theme.of(ctx).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          att.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  if (att.isImage)
+                    Expanded(
+                      child: InteractiveViewer(
+                        panEnabled: true,
+                        boundaryMargin: const EdgeInsets.all(20),
+                        minScale: 0.5,
+                        maxScale: 4,
+                        child: Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.memory(
+                              base64Decode(att.base64Data),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.picture_as_pdf_rounded, size: 72, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text(
+                              att.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'PDF-Dokument (${att.formattedSize})',
+                              style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF162340) : Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'Dokument ist der Aufgabe fest angehängt.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Schließen'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

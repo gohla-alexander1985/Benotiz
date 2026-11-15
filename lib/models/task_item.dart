@@ -41,6 +41,55 @@ class TaskComment {
   );
 }
 
+class TaskAttachment {
+  final String id;
+  final String name;
+  final String mimeType;
+  final String base64Data;
+  final int sizeBytes;
+
+  TaskAttachment({
+    required this.id,
+    required this.name,
+    required this.mimeType,
+    required this.base64Data,
+    required this.sizeBytes,
+  });
+
+  bool get isPdf =>
+      mimeType.toLowerCase().contains('pdf') || name.toLowerCase().endsWith('.pdf');
+
+  bool get isImage =>
+      mimeType.toLowerCase().startsWith('image/') ||
+      name.toLowerCase().endsWith('.png') ||
+      name.toLowerCase().endsWith('.jpg') ||
+      name.toLowerCase().endsWith('.jpeg') ||
+      name.toLowerCase().endsWith('.webp') ||
+      name.toLowerCase().endsWith('.gif');
+
+  String get formattedSize {
+    if (sizeBytes < 1024) return '$sizeBytes B';
+    if (sizeBytes < 1024 * 1024) return '${(sizeBytes / 1024).toStringAsFixed(1)} KB';
+    return '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'name': name,
+    'mimeType': mimeType,
+    'base64Data': base64Data,
+    'sizeBytes': sizeBytes,
+  };
+
+  factory TaskAttachment.fromMap(Map<String, dynamic> map) => TaskAttachment(
+    id: map['id'] as String? ?? const Uuid().v4(),
+    name: map['name'] as String? ?? 'Anhang',
+    mimeType: map['mimeType'] as String? ?? 'application/octet-stream',
+    base64Data: map['base64Data'] as String? ?? '',
+    sizeBytes: map['sizeBytes'] as int? ?? 0,
+  );
+}
+
 class TaskItem {
   final String id;
   final String title;
@@ -55,6 +104,7 @@ class TaskItem {
   final String? completedBy; // Who marked it complete
   final DateTime? completedAt;
   final List<TaskComment> comments;
+  final List<TaskAttachment> attachments;
   final String? linkedNoteId;
   final String? linkedNoteTitle;
   final DateTime createdAt;
@@ -74,6 +124,7 @@ class TaskItem {
     this.completedBy,
     this.completedAt,
     this.comments = const [],
+    this.attachments = const [],
     this.linkedNoteId,
     this.linkedNoteTitle,
     required this.createdAt,
@@ -92,6 +143,7 @@ class TaskItem {
     String? linkedNoteId,
     String? linkedNoteTitle,
     List<TaskComment> comments = const [],
+    List<TaskAttachment> attachments = const [],
   }) {
     final now = DateTime.now();
     return TaskItem(
@@ -108,6 +160,7 @@ class TaskItem {
       completedBy: null,
       completedAt: null,
       comments: comments,
+      attachments: attachments,
       linkedNoteId: linkedNoteId,
       linkedNoteTitle: linkedNoteTitle,
       createdAt: now,
@@ -134,6 +187,7 @@ class TaskItem {
     String? completedBy,
     DateTime? completedAt,
     List<TaskComment>? comments,
+    List<TaskAttachment>? attachments,
     String? linkedNoteId,
     String? linkedNoteTitle,
     DateTime? createdAt,
@@ -153,6 +207,7 @@ class TaskItem {
       completedBy: completedBy ?? this.completedBy,
       completedAt: completedAt ?? this.completedAt,
       comments: comments ?? this.comments,
+      attachments: attachments ?? this.attachments,
       linkedNoteId: linkedNoteId ?? this.linkedNoteId,
       linkedNoteTitle: linkedNoteTitle ?? this.linkedNoteTitle,
       createdAt: createdAt ?? this.createdAt,
@@ -175,6 +230,7 @@ class TaskItem {
       'completedBy': completedBy,
       'completedAt': completedAt?.toIso8601String(),
       'comments': comments.map((c) => c.toMap()).toList(),
+      'attachments': attachments.map((a) => a.toMap()).toList(),
       'linkedNoteId': linkedNoteId,
       'linkedNoteTitle': linkedNoteTitle,
       'createdAt': createdAt.toIso8601String(),
@@ -187,6 +243,11 @@ class TaskItem {
     final commentsList = rawComments != null
         ? rawComments.map((c) => TaskComment.fromMap(c as Map<String, dynamic>)).toList()
         : <TaskComment>[];
+
+    final rawAttachments = map['attachments'] as List<dynamic>?;
+    final attachmentsList = rawAttachments != null
+        ? rawAttachments.map((a) => TaskAttachment.fromMap(a as Map<String, dynamic>)).toList()
+        : <TaskAttachment>[];
 
     return TaskItem(
       id: map['id'] as String,
@@ -204,6 +265,7 @@ class TaskItem {
       completedBy: map['completedBy'] as String?,
       completedAt: map['completedAt'] != null ? DateTime.tryParse(map['completedAt'] as String) : null,
       comments: commentsList,
+      attachments: attachmentsList,
       linkedNoteId: map['linkedNoteId'] as String?,
       linkedNoteTitle: map['linkedNoteTitle'] as String?,
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),

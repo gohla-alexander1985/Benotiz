@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -134,6 +135,97 @@ class AIService {
     }
 
     return MathEngine.instance.completeFormula(formula);
+  }
+
+  /// Transcribes stroke coordinates directly into printed text (Druckschrift)
+  /// using Google Input Tools handwriting API (free, fast, German handwriting model)
+  /// with Gemini API multimodal fallback.
+  Future<String> transcribeStrokes({
+    required List<List<Offset>> strokes,
+    double width = 600,
+    double height = 240,
+    String? imageBase64,
+  }) async {
+    if (strokes.isEmpty) return '';
+
+    // 1. Primary: Google Input Tools Handwriting Recognition (High accuracy for German stylus handwriting)
+    try {
+      final inkList = <List<List<int>>>[];
+      int timeOffset = 0;
+
+      for (final stroke in strokes) {
+        if (stroke.isEmpty) continue;
+        final xs = <int>[];
+        final ys = <int>[];
+        final ts = <int>[];
+
+        for (final pt in stroke) {
+          xs.add(pt.dx.round());
+          ys.add(pt.dy.round());
+          ts.add(timeOffset);
+          timeOffset += 16;
+        }
+        timeOffset += 100;
+        inkList.add([xs, ys, ts]);
+      }
+
+      if (inkList.isNotEmpty) {
+        final url = Uri.parse(
+          'https://inputtools.google.com/request?ime=handwriting&app=mobilesearch&cs=1&oe=UTF-8',
+        );
+        final body = {
+          'options': 'enable_pre_space',
+          'requests': [
+            {
+              'writing_guide': {
+                'writing_area_width': width.round(),
+                'writing_area_height': height.round(),
+              },
+              'ink': inkList,
+              'language': 'de',
+            }
+          ]
+        };
+
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(body),
+        );
+
+        if (response.statusCode == 200) {
+          final dynamic resData = json.decode(response.body);
+          if (resData is List && resData.length > 1 && resData[0] == 'SUCCESS') {
+            final results = resData[1] as List<dynamic>;
+            final recognizedWords = <String>[];
+            for (final item in results) {
+              if (item is List && item.length > 1 && item[1] is List) {
+                final candidates = item[1] as List<dynamic>;
+                if (candidates.isNotEmpty) {
+                  recognizedWords.add(candidates.first.toString());
+                }
+              }
+            }
+            final resultText = recognizedWords.join(' ').trim();
+            if (resultText.isNotEmpty) {
+              return resultText;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Google Input Tools transcription error: $e');
+    }
+
+    // 2. Multimodal Fallback: Gemini Vision if image and API key are available
+    if (imageBase64 != null && imageBase64.isNotEmpty) {
+      final geminiText = await transcribeHandwriting(imageBase64);
+      if (geminiText.isNotEmpty && !geminiText.contains('OCR-Simulation')) {
+        return geminiText;
+      }
+    }
+
+    return '';
   }
 
   /// Transcribes handwriting from stylus drawing canvas into digital text (OCR)

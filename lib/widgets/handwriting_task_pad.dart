@@ -108,14 +108,30 @@ class _HandwritingTaskPadState extends State<HandwritingTaskPad> {
       final pngBytes = byteData!.buffer.asUint8List();
       final base64Image = base64Encode(pngBytes);
 
-      // 2. Call OCR / handwriting transcription via AIService
-      final recognizedText = await AIService.instance.transcribeHandwriting(base64Image);
+      // 2. Call handwriting transcription via AIService (Google Input Tools API + Gemini fallback)
+      final recognizedText = await AIService.instance.transcribeStrokes(
+        strokes: _strokes,
+        width: canvasWidth,
+        height: canvasHeight,
+        imageBase64: base64Image,
+      );
 
       String title = '';
       String description = '';
 
-      if (recognizedText.contains('OCR-Simulation') || recognizedText.isEmpty) {
-        // Smart fallback dialog where user can confirm or dictate the printed text
+      if (recognizedText.trim().isNotEmpty && !recognizedText.contains('OCR-Simulation')) {
+        // Direct successful recognition into Druckschrift!
+        final lines = recognizedText.trim().split('\n').where((l) => l.trim().isNotEmpty).toList();
+        if (lines.isNotEmpty) {
+          title = lines.first.trim();
+          if (lines.length > 1) {
+            description = lines.sublist(1).join('\n').trim();
+          }
+        } else {
+          title = recognizedText.trim();
+        }
+      } else {
+        // Offline / fallback dialog if network or API failed
         if (mounted) {
           final textCtrl = TextEditingController();
           final confirmed = await showDialog<bool>(
@@ -134,7 +150,7 @@ class _HandwritingTaskPadState extends State<HandwritingTaskPad> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Handschrift erfolgreich erfasst! Prüfe oder ergänze die Druckschrift für die Aufgabe:',
+                    'Handschrift konnte online nicht automatisch umgewandelt werden (z. B. offline). Bitte trage die Druckschrift ein:',
                     style: TextStyle(fontSize: 13),
                   ),
                   const SizedBox(height: 12),
@@ -168,17 +184,6 @@ class _HandwritingTaskPadState extends State<HandwritingTaskPad> {
               description = lines.sublist(1).join('\n').trim();
             }
           }
-        }
-      } else {
-        // Clean recognized text
-        final lines = recognizedText.split('\n').where((l) => l.trim().isNotEmpty).toList();
-        if (lines.isNotEmpty) {
-          title = lines.first.trim();
-          if (lines.length > 1) {
-            description = lines.sublist(1).join('\n').trim();
-          }
-        } else {
-          title = recognizedText.trim();
         }
       }
 
