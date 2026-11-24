@@ -216,33 +216,82 @@ class TaskService {
     }
   }
 
-  /// Encodes a task into a self-contained URL link so any recipient can open and import it
+  /// Encodes a task into a self-contained URL link so any recipient can open and import it.
+  /// Lightweight encoding strips large raw binary attachment bytes to ensure the URL never exceeds
+  /// browser/server limits (averting HTTP 414 / "Webseite nicht erreichbar").
   String generateTaskShareLink(TaskItem task) {
-    final jsonStr = json.encode(task.toMap());
+    // Strip heavy binary attachment data from URL link to keep URL short and universally loadable
+    final strippedAttachments = task.attachments.map((a) {
+      return TaskAttachment(
+        id: a.id,
+        name: a.name,
+        mimeType: a.mimeType,
+        base64Data: a.base64Data.length > 500 ? '' : a.base64Data,
+        sizeBytes: a.sizeBytes,
+      );
+    }).toList();
+
+    final lightTask = task.copyWith(attachments: strippedAttachments);
+    final jsonStr = json.encode(lightTask.toMap());
     final bytes = utf8.encode(jsonStr);
     final base64 = base64Url.encode(bytes);
     return '$appBaseUrl/?import_task=$base64';
   }
 
-  /// Decodes a task from the URL base64 payload
+  /// Decodes a task from the URL base64 payload or full URL string
   TaskItem? decodeTaskFromPayload(String payload) {
     try {
-      final clean = payload.trim().replaceAll(' ', '+');
-      final bytes = base64Url.decode(clean);
+      String clean = payload.trim();
+
+      // If full URL was provided, extract the import_task payload part
+      if (clean.contains('import_task=')) {
+        final idx = clean.indexOf('import_task=');
+        clean = clean.substring(idx + 'import_task='.length);
+        if (clean.contains('&')) {
+          clean = clean.substring(0, clean.indexOf('&'));
+        }
+        if (clean.contains('#')) {
+          clean = clean.substring(0, clean.indexOf('#'));
+        }
+      }
+
+      // Handle URL decoding if percent-encoded
+      if (clean.contains('%')) {
+        try {
+          clean = Uri.decodeComponent(clean);
+        } catch (_) {}
+      }
+
+      clean = clean.replaceAll(' ', '+');
+
+      // Normalize base64Url padding if missing
+      String normalized = clean;
+      while (normalized.length % 4 != 0) {
+        normalized += '=';
+      }
+
+      List<int> bytes;
+      try {
+        bytes = base64Url.decode(normalized);
+      } catch (_) {
+        try {
+          bytes = base64.decode(normalized);
+        } catch (_) {
+          try {
+            bytes = base64Url.decode(clean);
+          } catch (_) {
+            bytes = base64.decode(clean);
+          }
+        }
+      }
+
       final jsonStr = utf8.decode(bytes);
       final map = json.decode(jsonStr) as Map<String, dynamic>;
       return TaskItem.fromMap(map);
     } catch (_) {
-      try {
-        // Fallback standard base64
-        final bytes = base64.decode(payload.trim());
-        final jsonStr = utf8.decode(bytes);
-        final map = json.decode(jsonStr) as Map<String, dynamic>;
-        return TaskItem.fromMap(map);
-      } catch (_) {
-        return null;
-      }
+      // Fallback
     }
+    return null;
   }
 
   /// Formats the task details, comments, and real live app link for sharing
@@ -301,12 +350,13 @@ class TaskService {
         '👉 Aktuellen Status in BEnotiz ansehen:\n$link';
   }
 
-  /// Sends task directly via Email client (Outlook, Mail, Gmail)
-  Future<bool> shareTaskViaEmail(TaskItem task) async {
+  /// Sends task directly via Email client (Outlook, Mail, Gmail), optionally pre-filling recipient
+  Future<bool> shareTaskViaEmail(TaskItem task, {String? recipientEmail}) async {
     final text = formatTaskShareText(task);
     final subject = 'Aufgabe zugewiesen: ${task.title}';
     final mailtoUri = Uri(
       scheme: 'mailto',
+      path: recipientEmail?.trim() ?? '',
       queryParameters: {
         'subject': subject,
         'body': text,
@@ -330,12 +380,13 @@ class TaskService {
     }
   }
 
-  /// Sends overdue reminder via Email
-  Future<bool> shareOverdueReminderViaEmail(TaskItem task) async {
+  /// Sends overdue reminder via Email, optionally pre-filling recipient
+  Future<bool> shareOverdueReminderViaEmail(TaskItem task, {String? recipientEmail}) async {
     final text = formatOverdueReminderText(task);
     final subject = '⚠️ Dringende Erinnerung (Überfällig): ${task.title}';
     final mailtoUri = Uri(
       scheme: 'mailto',
+      path: recipientEmail?.trim() ?? '',
       queryParameters: {'subject': subject, 'body': text},
     );
     try {
@@ -356,12 +407,13 @@ class TaskService {
     }
   }
 
-  /// Sends task completed notice via Email
-  Future<bool> shareCompletedNoticeViaEmail(TaskItem task, {String? completedBy}) async {
+  /// Sends completion notice via Email, optionally pre-filling recipient
+  Future<bool> shareCompletedNoticeViaEmail(TaskItem task, {String? recipientEmail, String? completedBy}) async {
     final text = formatCompletedNoticeText(task, completedBy: completedBy);
     final subject = '✅ Aufgabe erledigt: ${task.title}';
     final mailtoUri = Uri(
       scheme: 'mailto',
+      path: recipientEmail?.trim() ?? '',
       queryParameters: {'subject': subject, 'body': text},
     );
     try {

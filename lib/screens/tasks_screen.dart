@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../models/app_user.dart';
 import '../models/task_item.dart';
 import '../services/ai_service.dart';
 import '../services/storage_service.dart';
 import '../services/task_service.dart';
+import '../services/user_service.dart';
 import '../widgets/be_notiz_logo.dart';
 import '../widgets/task_detail_dialog.dart';
 import '../widgets/task_edit_dialog.dart';
+import '../widgets/task_import_dialog.dart';
 import '../widgets/task_share_dialog.dart';
 import 'note_edit_screen.dart';
 
@@ -24,6 +27,7 @@ class _TasksScreenState extends State<TasksScreen> {
   List<String> _groups = [];
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  AppUser? _currentUser;
 
   @override
   void initState() {
@@ -40,12 +44,89 @@ class _TasksScreenState extends State<TasksScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final tasks = await TaskService.instance.loadTasks();
-    final groups = await TaskService.instance.getGroups();
+    final groups = await UserService.instance.getAllGroups();
+    final current = await UserService.instance.getCurrentUser();
     setState(() {
       _tasks = tasks;
       _groups = groups;
+      _currentUser = current;
       _isLoading = false;
     });
+  }
+
+  void _showImportTaskLinkDialog() {
+    final linkCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.link_rounded, color: Color(0xFF1565C0)),
+            SizedBox(width: 10),
+            Text('Aufgabe per Link / Code öffnen'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Füge den empfangenen Aufgaben-Link oder Import-Code ein, um die Aufgabe sofort zu öffnen und zu importieren:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: linkCtrl,
+              autofocus: true,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'https://gohla-alexander1985.github.io/Benotiz/?import_task=...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1565C0),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.download_rounded, size: 18),
+            label: const Text('Aufgabe laden'),
+            onPressed: () {
+              final input = linkCtrl.text.trim();
+              if (input.isEmpty) return;
+              Navigator.pop(ctx);
+              final task = TaskService.instance.decodeTaskFromPayload(input);
+              if (task != null) {
+                showDialog(
+                  context: context,
+                  builder: (_) => TaskImportDialog(
+                    importedTask: task,
+                    onImported: () {
+                      _loadData();
+                    },
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('⚠️ Ungültiger oder unvollständiger Aufgaben-Link.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _toggleTask(TaskItem task) async {
@@ -389,13 +470,37 @@ class _TasksScreenState extends State<TasksScreen> {
               tooltip: 'Alle erledigten Aufgaben löschen (Delete)',
               onPressed: _clearCompletedTasks,
             ),
+          // Import task by link / code button
+          IconButton(
+            icon: const Icon(Icons.link_rounded),
+            tooltip: 'Aufgabe per Link / Code öffnen & importieren',
+            onPressed: _showImportTaskLinkDialog,
+          ),
           // AI Extraction button
           IconButton(
             icon: const Icon(Icons.auto_awesome_rounded),
             tooltip: 'Aufgaben mit KI aus Text generieren',
             onPressed: _showAIExtractPrompt,
           ),
-          const SizedBox(width: 8),
+          if (_currentUser != null) ...[
+            const SizedBox(width: 4),
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Tooltip(
+                message: 'Angemeldet als ${_currentUser!.fullName} (${_currentUser!.position})',
+                child: CircleAvatar(
+                  radius: 15,
+                  backgroundColor: Color(_currentUser!.colorValue),
+                  foregroundColor: Colors.white,
+                  child: Text(
+                    _currentUser!.initials,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(width: 4),
         ],
       ),
       body: _isLoading

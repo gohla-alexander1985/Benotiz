@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../models/task_item.dart';
 import '../services/task_service.dart';
+import '../services/user_service.dart';
 import 'handwriting_task_pad.dart';
 import 'task_share_dialog.dart';
+import 'user_picker_sheet.dart';
 
 class TaskEditDialog extends StatefulWidget {
   final TaskItem? task;
@@ -60,13 +62,40 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
   }
 
   Future<void> _loadGroups() async {
-    final groups = await TaskService.instance.getGroups();
+    final groups = await UserService.instance.getAllGroups();
     setState(() {
       _availableGroups = groups;
       if (_selectedGroup == null && groups.isNotEmpty) {
         _selectedGroup = groups.first;
       }
     });
+  }
+
+  void _openUserPicker() async {
+    final selected = await UserPickerSheet.show(
+      context,
+      currentAssignedTo: _assignedToController.text.trim(),
+      currentGroup: _selectedGroup,
+    );
+    if (selected != null) {
+      setState(() {
+        if (selected.isUser) {
+          final user = selected.user!;
+          _assignedToController.text = user.fullName;
+          if (user.groups.isNotEmpty) {
+            _selectedGroup = user.groups.first;
+            if (!_availableGroups.contains(_selectedGroup)) {
+              _availableGroups.add(_selectedGroup!);
+            }
+          }
+        } else if (selected.isGroup) {
+          _selectedGroup = selected.group!;
+          if (!_availableGroups.contains(_selectedGroup)) {
+            _availableGroups.add(_selectedGroup!);
+          }
+        }
+      });
+    }
   }
 
   @override
@@ -876,12 +905,39 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                 ),
                 const SizedBox(height: 16),
 
+                // Assign to user and group section header
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    Text('Zuständigkeit & Gruppe:', style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold)),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      icon: const Icon(Icons.people_alt_outlined, size: 16),
+                      label: const Text('Aus Team wählen', style: TextStyle(fontSize: 12)),
+                      onPressed: _openUserPicker,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+
                 // Assign to user
                 TextField(
                   controller: _assignedToController,
-                  decoration: const InputDecoration(
-                    labelText: 'Zuweisen an Benutzer (Name / E-Mail)',
-                    prefixIcon: Icon(Icons.person_outline_rounded),
+                  decoration: InputDecoration(
+                    labelText: 'Zuständiger Benutzer (Name / E-Mail)',
+                    hintText: 'Tippen oder "Aus Team wählen"',
+                    prefixIcon: const Icon(Icons.person_outline_rounded),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.people_rounded),
+                      tooltip: 'Benutzer auswählen',
+                      onPressed: _openUserPicker,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -891,7 +947,7 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        initialValue: _selectedGroup,
+                        initialValue: _availableGroups.contains(_selectedGroup) ? _selectedGroup : null,
                         decoration: const InputDecoration(
                           labelText: 'Gruppe zuweisen',
                           prefixIcon: Icon(Icons.group_outlined),

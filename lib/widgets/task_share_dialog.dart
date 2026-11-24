@@ -1,14 +1,210 @@
 import 'package:flutter/material.dart';
+import '../models/app_user.dart';
 import '../models/task_item.dart';
 import '../services/task_service.dart';
+import '../services/user_service.dart';
 
-class TaskShareDialog extends StatelessWidget {
+class TaskShareDialog extends StatefulWidget {
   final TaskItem task;
 
   const TaskShareDialog({super.key, required this.task});
 
   @override
+  State<TaskShareDialog> createState() => _TaskShareDialogState();
+}
+
+class _TaskShareDialogState extends State<TaskShareDialog> {
+  List<AppUser> _users = [];
+  List<String> _groups = [];
+  bool _isLoadingTeam = true;
+  AppUser? _selectedRecipientUser;
+  String? _selectedRecipientGroup;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTeam();
+  }
+
+  Future<void> _loadTeam() async {
+    final users = await UserService.instance.getUsers();
+    final groups = await UserService.instance.getAllGroups();
+    setState(() {
+      _users = users;
+      _groups = groups;
+      _isLoadingTeam = false;
+
+      // Auto-select if task.assignedTo matches a user
+      if (widget.task.assignedTo != null && widget.task.assignedTo!.isNotEmpty) {
+        final match = users.where((u) =>
+            u.fullName.toLowerCase() == widget.task.assignedTo!.toLowerCase() ||
+            u.email.toLowerCase() == widget.task.assignedTo!.toLowerCase());
+        if (match.isNotEmpty) {
+          _selectedRecipientUser = match.first;
+        }
+      }
+      if (widget.task.assignedGroup != null && widget.task.assignedGroup!.isNotEmpty) {
+        _selectedRecipientGroup = widget.task.assignedGroup;
+      }
+    });
+  }
+
+  void _shareWithUser(AppUser user) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: Color(user.colorValue),
+                      foregroundColor: Colors.white,
+                      child: Text(user.initials),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Senden an: ${user.fullName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text('${user.position.isNotEmpty ? "${user.position} • " : ""}${user.email}',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFE3F2FD),
+                  child: Icon(Icons.email_outlined, color: Color(0xFF1565C0)),
+                ),
+                title: Text('Per E-Mail an ${user.email} senden', style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Öffnet E-Mail-Programm mit vorausgefüllter Adresse & Aufgabe'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                  await TaskService.instance.shareTaskViaEmail(widget.task, recipientEmail: user.email);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFE8F5E9),
+                  child: Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF2E7D32)),
+                ),
+                title: const Text('Per WhatsApp teilen', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Sendet Aufgabendetails & Direkt-Link'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                  await TaskService.instance.shareTaskViaWhatsApp(widget.task);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFFFF3E0),
+                  child: Icon(Icons.copy_rounded, color: Color(0xFFE65100)),
+                ),
+                title: const Text('Link & Text kopieren', style: TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                  await TaskService.instance.copyTaskToClipboard(widget.task);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('📋 Link für ${user.fullName} kopiert!')),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _shareWithGroup(String groupName) {
+    final groupMembers = _users.where((u) => u.groups.contains(groupName)).toList();
+    final emails = groupMembers.map((u) => u.email).where((e) => e.isNotEmpty).join(',');
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    const CircleAvatar(
+                      backgroundColor: Color(0xFF1565C0),
+                      child: Icon(Icons.group_rounded, color: Colors.white),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Gruppe: $groupName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text('${groupMembers.length} Mitglied(er) in dieser Gruppe', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFE3F2FD),
+                  child: Icon(Icons.email_outlined, color: Color(0xFF1565C0)),
+                ),
+                title: Text('Per E-Mail an Gruppe "$groupName" senden', style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(emails.isNotEmpty ? 'Empfänger: $emails' : 'Keine E-Mail-Adressen hinterlegt'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                  await TaskService.instance.shareTaskViaEmail(widget.task, recipientEmail: emails);
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFE8F5E9),
+                  child: Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF2E7D32)),
+                ),
+                title: const Text('Per WhatsApp an Gruppe teilen', style: TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                  await TaskService.instance.shareTaskViaWhatsApp(widget.task);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final task = widget.task;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final dueStr = task.dueDate != null
@@ -20,7 +216,7 @@ class TaskShareDialog extends StatelessWidget {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        constraints: const BoxConstraints(maxWidth: 540),
         child: Padding(
           padding: const EdgeInsets.all(22.0),
           child: SingleChildScrollView(
@@ -45,14 +241,14 @@ class TaskShareDialog extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Aufgabe teilen & senden',
+                            'Aufgabe verteilen & senden',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
                             ),
                           ),
                           Text(
-                            'Der Empfänger kann die Aufgabe öffnen, kommentieren & erledigen',
+                            'Wähle Benutzer oder Gruppe zum direkten Versenden',
                             style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade600),
                           ),
                         ],
@@ -173,7 +369,99 @@ class TaskShareDialog extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
+
+                // USER & GROUP SELECTION SECTION
+                Text(
+                  'TEAM-MITGLIED ODER GRUPPE AUSWÄHLEN:',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                if (_isLoadingTeam)
+                  const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+                else ...[
+                  // Groups quick chips
+                  if (_groups.isNotEmpty) ...[
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _groups.map((group) {
+                          final isGroupSelected = _selectedRecipientGroup == group;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ActionChip(
+                              avatar: const Icon(Icons.group_rounded, size: 14),
+                              label: Text(group, style: const TextStyle(fontSize: 12)),
+                              backgroundColor: isGroupSelected ? theme.colorScheme.primary.withAlpha(40) : null,
+                              onPressed: () => _shareWithGroup(group),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+
+                  // User selection horizontal list
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _users.map((user) {
+                        final isSelected = _selectedRecipientUser?.id == user.id;
+
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => _shareWithUser(user),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? theme.colorScheme.primary.withAlpha(25)
+                                    : (isDark ? const Color(0xFF182647) : Colors.grey.shade100),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: Color(user.colorValue),
+                                    foregroundColor: Colors.white,
+                                    child: Text(user.initials, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(user.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                      if (user.position.isNotEmpty)
+                                        Text(user.position, style: TextStyle(fontSize: 10, color: theme.colorScheme.primary)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 10),
 
                 // Special Overdue Reminder Options
                 if (task.isOverdue) ...[
@@ -224,8 +512,8 @@ class TaskShareDialog extends StatelessWidget {
                     backgroundColor: Color(0xFFE3F2FD),
                     child: Icon(Icons.email_outlined, color: Color(0xFF1565C0)),
                   ),
-                  title: const Text('Per E-Mail versenden', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  subtitle: const Text('Öffnet Ihr Mailprogramm (Outlook, Mail, Gmail)', style: TextStyle(fontSize: 12)),
+                  title: const Text('Allgemein per E-Mail versenden', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: const Text('Öffnet Mailprogramm (Outlook, Mail, Gmail)', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
                   onTap: () async {
                     Navigator.pop(context);
@@ -239,8 +527,8 @@ class TaskShareDialog extends StatelessWidget {
                     backgroundColor: Color(0xFFE8F5E9),
                     child: Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF2E7D32)),
                   ),
-                  title: const Text('Per WhatsApp teilen', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                  subtitle: const Text('Direkt an Kontakt oder Gruppe senden', style: TextStyle(fontSize: 12)),
+                  title: const Text('Allgemein per WhatsApp teilen', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  subtitle: const Text('Direkt an Kontakt oder Chat senden', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
                   onTap: () async {
                     Navigator.pop(context);

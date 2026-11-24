@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import '../models/app_user.dart';
 import '../models/note.dart';
 import '../models/note_template.dart';
 import '../services/sharing_service.dart';
 import '../services/storage_service.dart';
+import '../services/user_service.dart';
 import '../widgets/be_notiz_logo.dart';
 import '../widgets/note_card.dart';
 import '../widgets/stylus_canvas_screen.dart';
@@ -23,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _searchQuery = '';
   String _selectedFilter = 'all'; // 'all', 'pinned', 'shared', or specific '#tag'
   bool _isGridView = true;
+  AppUser? _currentUser;
 
   @override
   void initState() {
@@ -33,8 +36,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadNotes() async {
     setState(() => _isLoading = true);
     final notes = await StorageService.instance.loadNotes();
+    final current = await UserService.instance.getCurrentUser();
     setState(() {
       _allNotes = notes;
+      _currentUser = current;
       _isLoading = false;
     });
   }
@@ -335,7 +340,25 @@ class _HomeScreenState extends State<HomeScreen> {
               });
             },
           ),
-          const SizedBox(width: 8),
+          if (_currentUser != null) ...[
+            const SizedBox(width: 4),
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Tooltip(
+                message: 'Angemeldet als ${_currentUser!.fullName} (${_currentUser!.position})',
+                child: CircleAvatar(
+                  radius: 15,
+                  backgroundColor: Color(_currentUser!.colorValue),
+                  foregroundColor: Colors.white,
+                  child: Text(
+                    _currentUser!.initials,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                  ),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(width: 4),
         ],
       ),
       body: _isLoading
