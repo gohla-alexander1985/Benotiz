@@ -9,7 +9,9 @@ void main() async {
 }
 
 class BEnotizApp extends StatelessWidget {
-  const BEnotizApp({super.key});
+  final bool? startAuthenticated;
+
+  const BEnotizApp({super.key, this.startAuthenticated});
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +141,7 @@ class BEnotizApp extends StatelessWidget {
         ),
       ),
       themeMode: ThemeMode.system,
-      home: const MainShell(),
+      home: MainShell(startAuthenticated: startAuthenticated),
     );
   }
 }

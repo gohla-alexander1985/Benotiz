@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import '../services/sync_service.dart';
 import '../services/task_service.dart';
 import '../services/user_service.dart';
 import '../widgets/task_import_dialog.dart';
+import 'auth_screen.dart';
 import 'home_screen.dart';
 import 'tasks_screen.dart';
 import 'user_management_screen.dart';
 
 class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+  final bool? startAuthenticated;
+
+  const MainShell({super.key, this.startAuthenticated});
 
   @override
   State<MainShell> createState() => _MainShellState();
@@ -15,20 +19,70 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+  bool _isAuthenticated = false;
+  bool _isCheckingAuth = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _handleDeepLink();
-    });
+    _initAuthAndDeepLinks();
   }
 
-  void _handleDeepLink() {
+  Future<void> _initAuthAndDeepLinks() async {
+    // 1. Check deep links first (such as #sync= or ?user_login=)
+    await _handleDeepLink();
+
+    // 2. Determine authentication state
+    bool isAuth = false;
+    if (widget.startAuthenticated != null) {
+      isAuth = widget.startAuthenticated!;
+    } else {
+      isAuth = await UserService.instance.isLoggedIn();
+    }
+
+    if (mounted) {
+      setState(() {
+        _isAuthenticated = isAuth;
+        _isCheckingAuth = false;
+      });
+    }
+  }
+
+  Future<void> _handleDeepLink() async {
     try {
       final uri = Uri.base;
 
-      // 1. Check for multi-device user login: ?user_login=... or #user_login=...
+      // 1. Multi-device full sync: ?sync=... or #sync=...
+      String? syncPayload = uri.queryParameters['sync'];
+      if (syncPayload == null || syncPayload.isEmpty) {
+        final frag = uri.fragment;
+        if (frag.contains('sync=')) {
+          final idx = frag.indexOf('sync=');
+          String sub = frag.substring(idx + 'sync='.length);
+          if (sub.contains('&')) sub = sub.substring(0, sub.indexOf('&'));
+          if (sub.contains('#')) sub = sub.substring(0, sub.indexOf('#'));
+          syncPayload = sub;
+        }
+      }
+
+      if (syncPayload != null && syncPayload.isNotEmpty) {
+        final res = await SyncService.instance.importSyncBundle(syncPayload);
+        if (res.success && mounted) {
+          setState(() {
+            _isAuthenticated = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🎉 Erfolgreich synchronisiert! ${res.user?.fullName ?? ''} angemeldet.'),
+              backgroundColor: const Color(0xFF2E7D32),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          return;
+        }
+      }
+
+      // 2. Multi-device user login: ?user_login=... or #user_login=...
       String? userPayload = uri.queryParameters['user_login'];
       if (userPayload == null || userPayload.isEmpty) {
         final frag = uri.fragment;
@@ -44,9 +98,12 @@ class _MainShellState extends State<MainShell> {
       if (userPayload != null && userPayload.isNotEmpty) {
         final user = UserService.instance.decodeUserFromPayload(userPayload);
         if (user != null) {
-          UserService.instance.saveUser(user);
-          UserService.instance.setCurrentUser(user);
+          await UserService.instance.saveUser(user);
+          await UserService.instance.setCurrentUser(user);
           if (mounted) {
+            setState(() {
+              _isAuthenticated = true;
+            });
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('👤 Angemeldet als ${user.fullName} (${user.position})!'),
@@ -58,7 +115,7 @@ class _MainShellState extends State<MainShell> {
         }
       }
 
-      // 2. Check for task import link: ?import_task=... or #import_task=...
+      // 3. Task import link: ?import_task=... or #import_task=...
       String? payload = uri.queryParameters['import_task'];
       if (payload == null || payload.isEmpty) {
         final frag = uri.fragment;
@@ -100,18 +157,42 @@ class _MainShellState extends State<MainShell> {
     } catch (_) {}
   }
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    TasksScreen(),
-    UserManagementScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    if (_isCheckingAuth) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (!_isAuthenticated) {
+      return AuthScreen(
+        onAuthenticated: () {
+          setState(() {
+            _isAuthenticated = true;
+          });
+        },
+      );
+    }
+
+    final screens = [
+      const HomeScreen(),
+      const TasksScreen(),
+      UserManagementScreen(
+        onLogout: () {
+          setState(() {
+            _isAuthenticated = false;
+          });
+        },
+      ),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: screens,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,

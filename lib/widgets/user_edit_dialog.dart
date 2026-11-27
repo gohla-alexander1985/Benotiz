@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../models/app_user.dart';
 import '../services/user_service.dart';
 
@@ -22,6 +23,8 @@ class _UserEditDialogState extends State<UserEditDialog> {
   late TextEditingController _lastNameController;
   late TextEditingController _emailController;
   late TextEditingController _positionController;
+  late TextEditingController _passwordController;
+  bool _obscurePassword = true;
   late List<String> _selectedGroups;
   late int _selectedColor;
   List<String> _availableGroups = [];
@@ -46,6 +49,7 @@ class _UserEditDialogState extends State<UserEditDialog> {
     _lastNameController = TextEditingController(text: u?.lastName ?? '');
     _emailController = TextEditingController(text: u?.email ?? '');
     _positionController = TextEditingController(text: u?.position ?? '');
+    _passwordController = TextEditingController();
     _selectedGroups = List.from(u?.groups ?? ['Projekt Team']);
     _selectedColor = u?.colorValue ?? _avatarColors.first;
 
@@ -66,6 +70,7 @@ class _UserEditDialogState extends State<UserEditDialog> {
     _lastNameController.dispose();
     _emailController.dispose();
     _positionController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -76,6 +81,14 @@ class _UserEditDialogState extends State<UserEditDialog> {
     final lastName = _lastNameController.text.trim();
     final email = _emailController.text.trim().toLowerCase();
     final position = _positionController.text.trim();
+
+    String? newHash;
+    String? newSalt;
+    if (_passwordController.text.isNotEmpty) {
+      final salt = const Uuid().v4();
+      newSalt = salt;
+      newHash = AppUser.hashPassword(_passwordController.text, salt);
+    }
 
     final user = (widget.user ?? AppUser.create(
       firstName: firstName,
@@ -91,6 +104,8 @@ class _UserEditDialogState extends State<UserEditDialog> {
       position: position,
       groups: _selectedGroups,
       colorValue: _selectedColor,
+      passwordHash: newHash,
+      salt: newSalt,
       updatedAt: DateTime.now(),
     );
 
@@ -268,6 +283,32 @@ class _UserEditDialogState extends State<UserEditDialog> {
                       }
                       if (!val.contains('@') || !val.contains('.')) {
                         return 'Ungültige E-Mail-Adresse';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Password field
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: widget.user != null ? 'Neues Passwort festlegen (optional)' : 'Passwort *',
+                      hintText: 'Mindestens 6 Zeichen',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                      helperText: 'Ermöglicht die Anmeldung an weiteren Geräten',
+                    ),
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty && val.length < 6) {
+                        return 'Mindestens 6 Zeichen erforderlich';
+                      }
+                      if (widget.user == null && (val == null || val.isEmpty)) {
+                        return 'Bitte Passwort eingeben';
                       }
                       return null;
                     },

@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
 class AppUser {
@@ -8,6 +10,8 @@ class AppUser {
   final String position; // e.g. "Bauleiter", "Architekt", "Projektleiter", "Geschäftsführer"
   final List<String> groups; // e.g. ["Projekt Team", "Management"]
   final int colorValue; // Avatar background color
+  final String passwordHash;
+  final String salt;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -19,6 +23,8 @@ class AppUser {
     this.position = '',
     this.groups = const [],
     this.colorValue = 0xFF1565C0,
+    this.passwordHash = '',
+    this.salt = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -30,8 +36,12 @@ class AppUser {
     String position = '',
     List<String> groups = const [],
     int? colorValue,
+    String password = '',
   }) {
     final now = DateTime.now();
+    final salt = password.isNotEmpty ? const Uuid().v4() : '';
+    final hash = password.isNotEmpty ? hashPassword(password, salt) : '';
+
     return AppUser(
       id: const Uuid().v4(),
       firstName: firstName.trim(),
@@ -40,10 +50,45 @@ class AppUser {
       position: position.trim(),
       groups: groups.map((g) => g.trim()).where((g) => g.isNotEmpty).toList(),
       colorValue: colorValue ?? _generateColorFor(firstName + lastName + email),
+      passwordHash: hash,
+      salt: salt,
       createdAt: now,
       updatedAt: now,
     );
   }
+
+  factory AppUser.register({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+    String position = '',
+    List<String> groups = const [],
+    int? colorValue,
+  }) {
+    return AppUser.create(
+      firstName: firstName,
+      lastName: lastName,
+      email: email,
+      position: position,
+      groups: groups,
+      colorValue: colorValue,
+      password: password,
+    );
+  }
+
+  static String hashPassword(String password, String salt) {
+    if (password.isEmpty) return '';
+    final bytes = utf8.encode('$salt:$password:benotiz_vault_v1');
+    return sha256.convert(bytes).toString();
+  }
+
+  bool verifyPassword(String password) {
+    if (passwordHash.isEmpty) return true; // Sample or legacy users without set password
+    return hashPassword(password, salt) == passwordHash;
+  }
+
+  bool get hasPassword => passwordHash.isNotEmpty;
 
   static int _generateColorFor(String seed) {
     const colors = [
@@ -89,6 +134,8 @@ class AppUser {
     String? position,
     List<String>? groups,
     int? colorValue,
+    String? passwordHash,
+    String? salt,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -100,6 +147,8 @@ class AppUser {
       position: position ?? this.position,
       groups: groups ?? this.groups,
       colorValue: colorValue ?? this.colorValue,
+      passwordHash: passwordHash ?? this.passwordHash,
+      salt: salt ?? this.salt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -113,6 +162,8 @@ class AppUser {
     'position': position,
     'groups': groups,
     'colorValue': colorValue,
+    'passwordHash': passwordHash,
+    'salt': salt,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
   };
@@ -129,6 +180,8 @@ class AppUser {
               .toList() ??
           const [],
       colorValue: map['colorValue'] as int? ?? 0xFF1565C0,
+      passwordHash: map['passwordHash'] as String? ?? '',
+      salt: map['salt'] as String? ?? '',
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(map['updatedAt'] as String? ?? '') ?? DateTime.now(),
     );

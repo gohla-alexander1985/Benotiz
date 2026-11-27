@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../models/app_user.dart';
 
 class UserService {
   static const String _usersKey = 'benotiz_users_v2';
   static const String _currentUserIdKey = 'benotiz_current_user_id_v2';
+  static const String _isLoggedInKey = 'benotiz_is_logged_in_v2';
   static const String _customGroupsKey = 'antigravity_groups_v1';
   static const String appBaseUrl = 'https://gohla-alexander1985.github.io/Benotiz';
 
@@ -13,6 +15,23 @@ class UserService {
   UserService._internal();
 
   AppUser? _cachedCurrentUser;
+
+  /// Returns true if a user is currently logged in on this device
+  Future<bool> isLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    final loggedIn = prefs.getBool(_isLoggedInKey);
+    if (loggedIn != null) return loggedIn;
+
+    // Fallback: If not explicitly set, check if current user id is saved
+    final currentId = prefs.getString(_currentUserIdKey);
+    return currentId != null && currentId.isNotEmpty;
+  }
+
+  /// Sets the authentication status
+  Future<void> setLoggedIn(bool loggedIn) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_isLoggedInKey, loggedIn);
+  }
 
   /// Loads all configured users. Initializes defaults if empty.
   Future<List<AppUser>> getUsers() async {
@@ -68,6 +87,69 @@ class UserService {
     }
   }
 
+  /// Registers a new user with full credentials (Name, E-Mail, Password)
+  Future<AppUser> registerUser({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+    String position = '',
+    List<String> groups = const [],
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final users = await getUsers();
+    final existingIdx = users.indexWhere((u) => u.email.toLowerCase() == cleanEmail);
+
+    AppUser user;
+    if (existingIdx >= 0) {
+      // Update existing user with credentials
+      final existing = users[existingIdx];
+      final salt = const Uuid().v4();
+      final hash = AppUser.hashPassword(password, salt);
+      user = existing.copyWith(
+        firstName: firstName.trim().isNotEmpty ? firstName.trim() : existing.firstName,
+        lastName: lastName.trim().isNotEmpty ? lastName.trim() : existing.lastName,
+        position: position.trim().isNotEmpty ? position.trim() : existing.position,
+        groups: groups.isNotEmpty ? groups : existing.groups,
+        passwordHash: hash,
+        salt: salt,
+        updatedAt: DateTime.now(),
+      );
+    } else {
+      user = AppUser.register(
+        firstName: firstName,
+        lastName: lastName,
+        email: cleanEmail,
+        password: password,
+        position: position,
+        groups: groups.isNotEmpty ? groups : ['Projekt Team'],
+      );
+    }
+
+    await saveUser(user);
+    await setCurrentUser(user);
+    await setLoggedIn(true);
+    return user;
+  }
+
+  /// Logs in using Email and Password
+  Future<AppUser?> loginWithCredentials({
+    required String email,
+    required String password,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final user = await getUserByEmail(cleanEmail);
+    if (user == null) return null;
+
+    if (!user.verifyPassword(password)) {
+      return null;
+    }
+
+    await setCurrentUser(user);
+    await setLoggedIn(true);
+    return user;
+  }
+
   /// Deletes a user by ID
   Future<void> deleteUser(String userId) async {
     final users = await getUsers();
@@ -79,6 +161,8 @@ class UserService {
       if (_cachedCurrentUser != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_currentUserIdKey, _cachedCurrentUser!.id);
+      } else {
+        await logout();
       }
     }
   }
@@ -111,6 +195,15 @@ class UserService {
     _cachedCurrentUser = user;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_currentUserIdKey, user.id);
+    await prefs.setBool(_isLoggedInKey, true);
+  }
+
+  /// Logs out of the current device
+  Future<void> logout() async {
+    _cachedCurrentUser = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_isLoggedInKey, false);
+    await prefs.remove(_currentUserIdKey);
   }
 
   /// Logs in as user with the given email across devices.
@@ -135,6 +228,7 @@ class UserService {
     }
 
     await setCurrentUser(user);
+    await setLoggedIn(true);
     return user;
   }
 
@@ -226,40 +320,31 @@ class UserService {
   }
 
   List<AppUser> _createDefaultUsers() {
-    final now = DateTime.now();
     return [
-      AppUser(
-        id: 'user_alexander_1',
+      AppUser.create(
         firstName: 'Alexander',
         lastName: 'Gohla',
         email: 'alexander@benotiz.local',
         position: 'Projektleiter / Inhaber',
         groups: ['Management', 'Projekt Team'],
         colorValue: 0xFF1565C0,
-        createdAt: now,
-        updatedAt: now,
+        password: '', // Blank password allowed for defaults
       ),
-      AppUser(
-        id: 'user_sarah_2',
+      AppUser.create(
         firstName: 'Sarah',
         lastName: 'Weber',
         email: 'sarah.weber@benotiz.local',
         position: 'Bauleitung',
         groups: ['Projekt Team', 'Außendienst'],
         colorValue: 0xFF2E7D32,
-        createdAt: now,
-        updatedAt: now,
       ),
-      AppUser(
-        id: 'user_michael_3',
+      AppUser.create(
         firstName: 'Michael',
         lastName: 'Schmidt',
         email: 'michael.schmidt@benotiz.local',
         position: 'Architekt',
         groups: ['Planung', 'Projekt Team'],
         colorValue: 0xFF6A1B9A,
-        createdAt: now,
-        updatedAt: now,
       ),
     ];
   }

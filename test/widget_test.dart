@@ -14,7 +14,10 @@ import 'package:notes_app/widgets/stylus_canvas_screen.dart';
 
 void main() {
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({
+      'benotiz_is_logged_in_v2': true,
+      'benotiz_current_user_id_v2': 'user_alexander_1',
+    });
     await initializeDateFormatting('de_DE', null);
   });
 

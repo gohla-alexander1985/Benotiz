@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/app_user.dart';
 import '../services/ai_service.dart';
+import '../services/sync_service.dart';
 import '../services/user_service.dart';
 import '../widgets/be_notiz_logo.dart';
 import '../widgets/user_edit_dialog.dart';
 
 class UserManagementScreen extends StatefulWidget {
-  const UserManagementScreen({super.key});
+  final VoidCallback? onLogout;
+
+  const UserManagementScreen({super.key, this.onLogout});
 
   @override
   State<UserManagementScreen> createState() => _UserManagementScreenState();
@@ -103,8 +107,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     }
   }
 
-  void _showMultiDeviceLoginDialog(AppUser user) {
-    final loginLink = UserService.instance.generateDeviceLoginLink(user);
+  void _showMultiDeviceLoginDialog(AppUser user) async {
+    final syncLink = await SyncService.instance.generateSyncLink();
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -122,76 +128,132 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   color: const Color(0xFFE3F2FD),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.devices_rounded, color: Color(0xFF1565C0)),
+                child: const Icon(Icons.sync_rounded, color: Color(0xFF1565C0)),
               ),
               const SizedBox(width: 12),
               const Expanded(
-                child: Text('Auf weiterem Gerät anmelden', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: Text('Geräte-Synchronisation', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Benutzer: ${user.fullName} (${user.email})',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Öffne diesen Login-Link auf deinem Smartphone, Tablet oder PC, um dich sofort ohne Passworteingabe als "${user.fullName}" anzumelden und auf alle Notizen & Aufgaben zuzugreifen:',
-                  style: TextStyle(fontSize: 13, color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, height: 1.4),
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF162340) : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: isDark ? const Color(0xFF283B63) : Colors.grey.shade300),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Benutzer: ${user.fullName} (${user.email})',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.link_rounded, size: 20, color: Color(0xFF1565C0)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          loginLink,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Übertrage deine Daten (Notizen, Aufgaben & Konto) auf dein Zweitgerät:',
+                    style: TextStyle(fontSize: 13, color: isDark ? Colors.grey.shade300 : Colors.grey.shade700, height: 1.4),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Option 1: Live-Synchronisations-Link
+                  const Text('Option 1: Synchronisations-Link', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF162340) : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? const Color(0xFF283B63) : Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.link_rounded, size: 20, color: Color(0xFF1565C0)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            syncLink,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.copy_rounded, size: 20),
-                        tooltip: 'Login-Link kopieren',
+                        IconButton(
+                          icon: const Icon(Icons.copy_rounded, size: 20),
+                          tooltip: 'Sync-Link kopieren',
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: syncLink));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('📋 Synchronisations-Link kopiert!')),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Action Buttons for Sharing
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1565C0),
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.share_rounded, size: 16),
+                        label: const Text('Link senden'),
                         onPressed: () {
-                          Clipboard.setData(ClipboardData(text: loginLink));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('📋 Anmelde-Link kopiert!')),
+                          SharePlus.instance.share(
+                            ShareParams(
+                              text: 'BEnotiz Geräte-Synchronisation für ${user.fullName}:\n$syncLink',
+                              subject: 'BEnotiz Synchronisation',
+                            ),
                           );
+                        },
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                        icon: const Icon(Icons.download_rounded, size: 16),
+                        label: const Text('Backup exportieren (JSON)'),
+                        onPressed: () async {
+                          final jsonStr = await SyncService.instance.exportDataJson();
+                          await Clipboard.setData(ClipboardData(text: jsonStr));
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('💾 Backup-Daten in Zwischenablage kopiert!')),
+                            );
+                          }
+                        },
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                        icon: const Icon(Icons.upload_rounded, size: 16),
+                        label: const Text('Daten importieren'),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _showImportDataDialog();
                         },
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Icon(Icons.info_outline_rounded, size: 16, color: Colors.blue.shade700),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Alternativ auf dem anderen Gerät einfach dieselbe E-Mail-Adresse (${user.email}) eingeben.',
-                        style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
+
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 16, color: Colors.blue.shade700),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Auf dem Zweitgerät einfach den Link öffnen oder unter "Anmelden" die E-Mail und das Passwort eingeben.',
+                          style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -207,6 +269,135 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           ],
         );
       },
+    );
+  }
+
+  void _showImportDataDialog() {
+    final textCtrl = TextEditingController();
+    bool isImporting = false;
+    String? err;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.download_rounded, color: Color(0xFF1565C0)),
+              SizedBox(width: 10),
+              Text('Daten importieren'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Füge hier den Synchronisations-Link, Code oder das JSON-Backup ein:',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textCtrl,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Sync-Daten / JSON einfügen',
+                  hintText: 'https://.../#sync=... oder JSON',
+                  prefixIcon: Icon(Icons.paste_rounded),
+                ),
+              ),
+              if (err != null) ...[
+                const SizedBox(height: 8),
+                Text(err!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0)),
+              onPressed: isImporting
+                  ? null
+                  : () async {
+                      final input = textCtrl.text.trim();
+                      if (input.isEmpty) return;
+                      setDialogState(() {
+                        isImporting = true;
+                        err = null;
+                      });
+
+                      String payload = input;
+                      if (input.contains('#sync=')) {
+                        payload = input.substring(input.indexOf('#sync=') + '#sync='.length);
+                      } else if (input.contains('sync=')) {
+                        payload = input.substring(input.indexOf('sync=') + 'sync='.length);
+                      }
+                      if (payload.contains('&')) {
+                        payload = payload.substring(0, payload.indexOf('&'));
+                      }
+
+                      final res = await SyncService.instance.importSyncBundle(payload);
+                      if (res.success && ctx.mounted) {
+                        Navigator.pop(ctx);
+                        await _loadData();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(res.message),
+                              backgroundColor: const Color(0xFF2E7D32),
+                            ),
+                          );
+                        }
+                      } else {
+                        setDialogState(() {
+                          isImporting = false;
+                          err = res.message;
+                        });
+                      }
+                    },
+              child: const Text('Importieren & Synchronisieren', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: Colors.red),
+            SizedBox(width: 10),
+            Text('Abmelden?'),
+          ],
+        ),
+        content: const Text(
+          'Möchtest du dich wirklich abmelden? Du musst dich anschließend wieder mit deinem Passwort anmelden.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await UserService.instance.logout();
+              widget.onLogout?.call();
+            },
+            child: const Text('Abmelden', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -335,6 +526,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             icon: const Icon(Icons.login_rounded),
             tooltip: 'Per E-Mail anmelden',
             onPressed: _showEmailLoginPrompt,
+          ),
+          IconButton(
+            icon: const Icon(Icons.sync_rounded),
+            tooltip: 'Daten importieren / synchronisieren',
+            onPressed: _showImportDataDialog,
           ),
           IconButton(
             icon: const Icon(Icons.person_add_rounded),
@@ -472,24 +668,30 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                         visualDensity: VisualDensity.compact,
                                       ),
-                                      icon: const Icon(Icons.devices_rounded, size: 16),
-                                      label: const Text('Geräte-Sync / Link', style: TextStyle(fontSize: 12)),
+                                      icon: const Icon(Icons.sync_rounded, size: 16),
+                                      label: const Text('Synchronisieren', style: TextStyle(fontSize: 12)),
                                       onPressed: () => _showMultiDeviceLoginDialog(_currentUser!),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: theme.colorScheme.primary,
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                        visualDensity: VisualDensity.compact,
-                                      ),
-                                      icon: const Icon(Icons.edit_rounded, size: 16),
-                                      label: const Text('Profil bearbeiten', style: TextStyle(fontSize: 12)),
-                                      onPressed: () => _openUserEditDialog(_currentUser),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      visualDensity: VisualDensity.compact,
                                     ),
+                                    icon: const Icon(Icons.edit_rounded, size: 16),
+                                    label: const Text('Bearbeiten', style: TextStyle(fontSize: 12)),
+                                    onPressed: () => _openUserEditDialog(_currentUser),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: isDark ? const Color(0xFF281C24) : Colors.red.shade50,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    icon: const Icon(Icons.logout_rounded, color: Colors.red, size: 18),
+                                    tooltip: 'Abmelden',
+                                    onPressed: _confirmLogout,
                                   ),
                                 ],
                               ),
